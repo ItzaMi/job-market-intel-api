@@ -1,6 +1,6 @@
 # Job Market Intel API
 
-A small FastAPI service for managing job listings. Data is stored in memory (resets when the server restarts).
+A FastAPI service for managing job listings. Data is stored in Postgres.
 
 ## Prerequisites
 
@@ -25,6 +25,55 @@ Interactive docs:
 
 - Swagger UI: http://127.0.0.1:8000/docs
 - ReDoc: http://127.0.0.1:8000/redoc
+
+## Useful commands
+
+Start everything
+```bash
+docker compose up --build
+```
+
+Run in background
+```bash
+docker compose up -d --build
+```
+
+Stop containers
+```bash
+docker compose down
+```
+
+Stop and delete DB data
+```bash
+docker compose down -v
+```
+
+See running containers
+```bash
+docker compose ps
+```
+
+See logs
+```bash
+docker compose logs -f
+```
+
+Open Postgres shell
+```bash
+docker compose exec db psql -U postgres -d job_market_intel
+
+# then inside `psql`
+\dt
+SELECT * FROM job;
+
+# exit with
+\q
+```
+
+Run tests inside container
+```bash
+docker compose run --rm api uv run pytest
+```
 
 ## Run tests
 
