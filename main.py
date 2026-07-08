@@ -1,28 +1,49 @@
-from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import Depends,FastAPI, HTTPException
 from sqlmodel import Session, select
 
-from database import create_db_and_tables, get_session
-from models import Job, JobCreate, JobRead
+from database import get_session
+from models import Job, JobCreate, JobRead, JobFilters, SalaryRange
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    create_db_and_tables()
-    yield
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
+
+SALARY_RANGES = {
+    SalaryRange.under_40k: (None, 39999),
+    SalaryRange.range_40k_60k: (40000, 60000),
+    SalaryRange.range_60k_80k: (60000, 80000),
+    SalaryRange.range_80k_plus: (80000, None),
+}
 
 @app.get("/health/")
 async def health():
     return {"status": "ok"}
 
 @app.get("/jobs/", response_model=list[JobRead])
-async def list_jobs(session: Session = Depends(get_session)) -> list[Job]:
+async def list_jobs(filters: JobFilters = Depends(), session: Session = Depends(get_session)) -> list[Job]:
     statement = select(Job)
-    jobs = session.exec(statement).all()
-    return jobs
+
+    if filters.title:
+        statement = statement.where(Job.title.ilike(f"%{filters.title}%"))
+
+    if filters.company:
+        statement = statement.where(Job.company.ilike(f"%{filters.company}%"))
+
+    if filters.location:
+        statement = statement.where(Job.location.ilike(f"%{filters.location}%"))
+
+    if filters.salary_range:
+        min_salary, max_salary = SALARY_RANGES[filters.salary_range]
+
+        if min_salary is not None:
+            statement = statement.where(Job.salary >= min_salary)
+        if max_salary is not None:
+            statement = statement.where(Job.salary <= max_salary)
+
+    statement = statement.offset(filters.offset).limit(filters.limit)
+
+    return list(session.exec(statement).all())
 
 @app.get("/jobs/{job_id}/", response_model=JobRead)
 async def get_job(job_id: str, session: Session = Depends(get_session)) -> Job:
