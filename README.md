@@ -51,6 +51,135 @@ Postgres is exposed on `localhost:5432` with:
 | User     | `postgres`         |
 | Password | `postgres`         |
 
+## Docker, Postgres & Alembic
+
+This project splits responsibilities across two concerns:
+
+| Layer | Tool | Role |
+|-------|------|------|
+| **Data** | PostgreSQL (`db` service) | Stores job records permanently |
+| **Schema** | Alembic (`migrations/`) | Version-controls and applies table changes |
+
+The API reads/writes data through SQLModel, but it does **not** create or alter tables on startup. Schema changes are applied separately with Alembic.
+
+### How the services connect
+
+- **`api`** — runs FastAPI. Code is bind-mounted from project folder (`.:/app`), so Python file edits are picked up by the dev server without rebuilding the image.
+- **`db`** — runs Postgres 17. Data lives in the named volume `postgres_data`, so it survives `docker compose down` and container restarts.
+- **Alembic** — runs as a one-off command inside the `api` container (or locally with `uv`). It connects to the same Postgres instance and applies SQL from `migrations/versions/`.
+
+Migration files are committed to git. After pulling new migrations from a teammate, run `upgrade head` — you do not rebuild the image for that.
+
+### Database URLs
+
+Both the API and Alembic read `DATABASE_URL` from the environment (`database.py` and `migrations/env.py`). The **host** in the URL depends on where the command runs:
+
+| Where you run the command | Host in URL | Example |
+|---------------------------|-------------|---------|
+| Inside the `api` container | `db` (Docker service name) | `postgresql+psycopg://postgres:postgres@db:5432/job_market_intel` |
+| On host machine (`uv run …`) | `localhost` | `postgresql+psycopg://postgres:postgres@localhost:5432/job_market_intel` |
+
+`docker-compose.yml` sets the in-container URL for the `api` service automatically. Only `export DATABASE_URL=…` is needed when running Alembic or the API locally against the Docker Postgres.
+
+Format breakdown:
+
+```
+postgresql+psycopg://USER:PASSWORD@HOST:PORT/DATABASE
+                       │        │     │        └── job_market_intel
+                       │        │     └── 5432
+                       │        └── db (in compose) or localhost (from host)
+                       └── postgres:postgres
+```
+
+### First-time setup
+
+```bash
+# 1. Build and start both services
+docker compose up -d --build
+
+# 2. Apply all migrations (creates the job table)
+docker compose run --rm api uv run alembic upgrade head
+
+# 3. Verify
+curl http://127.0.0.1:8000/health/
+docker compose exec db psql -U postgres -d job_market_intel -c "\dt"
+```
+
+Step 2 is required on a fresh database. Without it, the API will start but requests that hit the DB will fail because the tables do not exist yet.
+
+### Day-to-day flow (changing the schema)
+
+When editing `models.py`:
+
+```bash
+# 1. Generate a migration (review the file before committing)
+docker compose run --rm api uv run alembic revision --autogenerate -m "add company size"
+
+# 2. Apply it to your local database
+docker compose run --rm api uv run alembic upgrade head
+
+# 3. Restart is usually not needed — the API picks up model changes via the bind mount
+#    Test at http://127.0.0.1:8000/docs
+```
+
+For generating migrations on the host:
+
+```bash
+export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/job_market_intel
+uv run alembic revision --autogenerate -m "add company size"
+uv run alembic upgrade head
+```
+
+Commit both `models.py` and the new file under `migrations/versions/`.
+
+### When to rebuild the API image
+
+Because the project directory is bind-mounted into the container, most changes do **not** require a rebuild:
+
+| Change | Rebuild? | What to do |
+|--------|----------|------------|
+| Python files (`main.py`, `models.py`, …) | No | Save the file; FastAPI dev server reloads |
+| New migration in `migrations/versions/` | No | Run `alembic upgrade head` |
+| `pyproject.toml` / `uv.lock` (new dependency) | **Yes** | `docker compose up -d --build` |
+| `DOCKERFILE` changes | **Yes** | `docker compose up -d --build` |
+| `docker-compose.yml` env / ports | No* | `docker compose up -d` (recreates containers) |
+
+\*Rebuild only if you also changed build-related settings; otherwise recreating the container is enough.
+
+### Resetting the database
+
+```bash
+# Stop containers and delete all persisted data (fresh empty Postgres)
+docker compose down -v
+
+# Start again and re-apply migrations from scratch
+docker compose up -d --build
+docker compose run --rm api uv run alembic upgrade head
+```
+
+### Useful Alembic commands
+
+Run inside Docker (recommended — uses the correct `DATABASE_URL` automatically):
+
+```bash
+# Apply all pending migrations
+docker compose run --rm api uv run alembic upgrade head
+
+# Roll back the last migration
+docker compose run --rm api uv run alembic downgrade -1
+
+# Show current revision
+docker compose run --rm api uv run alembic current
+
+# Show migration history
+docker compose run --rm api uv run alembic history
+
+# Generate a new migration after editing models.py
+docker compose run --rm api uv run alembic revision --autogenerate -m "your message"
+```
+
+Same commands work locally if `DATABASE_URL` points at `localhost:5432` (see [Database URLs](#database-urls) above).
+
 ## Local development (without Docker for the API)
 
 Install dependencies:
@@ -118,28 +247,6 @@ SELECT * FROM job;
 ```
 
 Exit with `\q`.
-
-## Migrations
-
-Create a new migration after changing models in `models.py`:
-
-```bash
-uv run alembic revision --autogenerate -m "describe your change"
-```
-
-Apply migrations:
-
-```bash
-uv run alembic upgrade head
-```
-
-Roll back one revision:
-
-```bash
-uv run alembic downgrade -1
-```
-
-When using Docker, prefix commands with `docker compose run --rm api`.
 
 ## Run tests
 
@@ -307,6 +414,8 @@ curl http://127.0.0.1:8000/jobs/YOUR_JOB_ID_HERE/
 
 ## Environment variables
 
-| Variable       | Description                                      | Default (Docker)                                                       |
-|----------------|--------------------------------------------------|------------------------------------------------------------------------|
-| `DATABASE_URL` | SQLAlchemy connection string                     | `postgresql+psycopg://postgres:postgres@db:5432/job_market_intel`    |
+| Variable       | Description                  | Set by |
+|----------------|------------------------------|--------|
+| `DATABASE_URL` | SQLAlchemy connection string | `docker-compose.yml` for the `api` service; you must export it yourself when running `uv` on the host |
+
+See [Database URLs](#database-urls) for the exact values to use inside Docker vs on your machine.
