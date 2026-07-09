@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Annotated
+import uuid
 from sqlmodel import Field, SQLModel
 
 from pydantic import BaseModel, Field as PydanticField
@@ -17,7 +18,7 @@ class JobBase(SQLModel):
     company_location: TextField
 
 class Job(JobBase, table=True):
-    id: str = Field(primary_key=True)
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     created_at: datetime
     updated_at: datetime
 
@@ -25,7 +26,7 @@ class JobCreate(JobBase):
     pass
 
 class JobRead(JobBase):
-    id: str
+    id: uuid.UUID
     created_at: datetime
     updated_at: datetime
 

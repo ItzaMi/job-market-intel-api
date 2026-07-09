@@ -1,5 +1,6 @@
 from datetime import datetime
 from uuid import uuid4
+import uuid
 
 from fastapi import Depends,FastAPI, HTTPException
 from sqlmodel import Session, select
@@ -59,7 +60,7 @@ async def list_jobs(filters: JobFilters = Depends(), session: Session = Depends(
     return list(session.exec(statement).all())
 
 @app.get("/jobs/{job_id}/", response_model=JobRead)
-async def get_job(job_id: str, session: Session = Depends(get_session)) -> Job:
+async def get_job(job_id: uuid.UUID, session: Session = Depends(get_session)) -> Job:
     job = session.get(Job, job_id)
     
     if job is None:
@@ -69,7 +70,7 @@ async def get_job(job_id: str, session: Session = Depends(get_session)) -> Job:
 
 @app.post("/jobs/", response_model=JobRead)
 async def create_job(job: JobCreate, session: Session = Depends(get_session)) -> Job:
-    new_job = Job(id=str(uuid4()), **job.model_dump(), created_at=datetime.now(), updated_at=datetime.now())
+    new_job = Job(**job.model_dump(), created_at=datetime.now(), updated_at=datetime.now())
 
     session.add(new_job)
     session.commit()
@@ -78,7 +79,7 @@ async def create_job(job: JobCreate, session: Session = Depends(get_session)) ->
     return new_job
 
 @app.delete("/jobs/{job_id}/", response_model=JobRead)
-async def delete_job(job_id: str, session: Session = Depends(get_session)) -> Job:
+async def delete_job(job_id: uuid.UUID, session: Session = Depends(get_session)) -> Job:
     job = session.get(Job, job_id)
 
     if job is None:
@@ -90,7 +91,7 @@ async def delete_job(job_id: str, session: Session = Depends(get_session)) -> Jo
     return job
 
 @app.patch("/jobs/{job_id}/", response_model=JobRead)
-async def update_job(job_id: str, job: JobUpdate, session: Session = Depends(get_session)) -> Job:
+async def update_job(job_id: uuid.UUID, job: JobUpdate, session: Session = Depends(get_session)) -> Job:
     db_job = session.get(Job, job_id)
 
     if db_job is None:
