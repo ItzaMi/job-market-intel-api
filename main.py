@@ -5,7 +5,7 @@ from fastapi import Depends,FastAPI, HTTPException
 from sqlmodel import Session, select
 
 from database import get_session
-from models import Job, JobCreate, JobRead, JobFilters, SalaryRange, JobUpdate
+from models import Job, JobCreate, JobRead, JobFilters, SalaryRange, JobUpdate, SortBy
 
 
 app = FastAPI()
@@ -15,6 +15,15 @@ SALARY_RANGES = {
     SalaryRange.range_40k_60k: (40000, 60000),
     SalaryRange.range_60k_80k: (60000, 80000),
     SalaryRange.range_80k_plus: (80000, None),
+}
+
+SORT_ORDERS = {
+    SortBy.created_at_asc: Job.created_at.asc(),
+    SortBy.created_at_desc: Job.created_at.desc(),
+    SortBy.updated_at_asc: Job.updated_at.asc(),
+    SortBy.updated_at_desc: Job.updated_at.desc(),
+    SortBy.salary_asc: Job.salary.asc(),
+    SortBy.salary_desc: Job.salary.desc(),
 }
 
 @app.get("/health/")
@@ -41,6 +50,9 @@ async def list_jobs(filters: JobFilters = Depends(), session: Session = Depends(
             statement = statement.where(Job.salary >= min_salary)
         if max_salary is not None:
             statement = statement.where(Job.salary <= max_salary)
+
+    if filters.sort:
+        statement = statement.order_by(SORT_ORDERS[filters.sort])
 
     statement = statement.offset(filters.offset).limit(filters.limit)
 

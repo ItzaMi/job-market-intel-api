@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field as PydanticField
 from enum import Enum
 
 TextField = Annotated[str, Field(min_length=1, max_length=120)]
+FilterText = Annotated[str, Field(min_length=1, max_length=120)]
 
 class JobBase(SQLModel):
     title: TextField
@@ -42,11 +43,19 @@ class SalaryRange(str, Enum):
     range_60k_80k = "60k_80k"
     range_80k_plus = "80k_plus"
 
+class SortBy(str, Enum):
+    created_at_asc = "created_at_asc"
+    created_at_desc = "created_at_desc"
+    updated_at_asc = "updated_at_asc"
+    updated_at_desc = "updated_at_desc"
+    salary_asc = "salary_asc"
+    salary_desc = "salary_desc"
 
 class JobFilters(BaseModel):
-    title: TextField | None = None
-    location: TextField | None = None
-    company: TextField | None = None
+    title: FilterText | None = None
+    location: FilterText | None = None
+    company: FilterText | None = None
     salary_range: SalaryRange | None = PydanticField(default=None, description="Filter jobs by salary range")
-    limit: int = Field(default=10, ge=1, le=100)
-    offset: int = Field(default=0, ge=0)
+    limit: int = PydanticField(default=10, ge=1, le=100)
+    offset: int = PydanticField(default=0, ge=0)
+    sort: SortBy = PydanticField(default=SortBy.created_at_desc)
