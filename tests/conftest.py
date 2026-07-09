@@ -8,10 +8,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine, select
 
-import database
-from database import get_session
-from main import app
-from models import Job
+from job_market_intel import database
+from job_market_intel.database import get_session
+from job_market_intel.main import app
+from job_market_intel.models import Job
 
 IS_SQLITE = os.environ["DATABASE_URL"].startswith("sqlite")
 

@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uv", "run", "fastapi", "dev", "main.py", "--host", "0.0.0.0"]
+CMD ["uv", "run", "fastapi", "dev", "src/job_market_intel/main.py", "--host", "0.0.0.0"]

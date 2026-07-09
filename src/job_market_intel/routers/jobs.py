@@ -1,15 +1,13 @@
 from datetime import datetime
-from uuid import uuid4
 import uuid
 
-from fastapi import Depends,FastAPI, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
-from database import get_session
-from models import Job, JobCreate, JobRead, JobFilters, SalaryRange, JobUpdate, SortBy
+from ..database import get_session
+from ..models import Job, JobCreate, JobRead, JobFilters, SalaryRange, JobUpdate, SortBy
 
-
-app = FastAPI()
+router = APIRouter()
 
 SALARY_RANGES = {
     SalaryRange.under_40k: (None, 39999),
@@ -27,11 +25,8 @@ SORT_ORDERS = {
     SortBy.salary_desc: Job.salary.desc(),
 }
 
-@app.get("/health/")
-async def health():
-    return {"status": "ok"}
 
-@app.get("/jobs/", response_model=list[JobRead])
+@router.get("/jobs/", response_model=list[JobRead])
 async def list_jobs(filters: JobFilters = Depends(), session: Session = Depends(get_session)) -> list[Job]:
     statement = select(Job)
 
@@ -59,16 +54,16 @@ async def list_jobs(filters: JobFilters = Depends(), session: Session = Depends(
 
     return list(session.exec(statement).all())
 
-@app.get("/jobs/{job_id}/", response_model=JobRead)
+@router.get("/jobs/{job_id}/", response_model=JobRead)
 async def get_job(job_id: uuid.UUID, session: Session = Depends(get_session)) -> Job:
     job = session.get(Job, job_id)
-    
+
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
     return job
 
-@app.post("/jobs/", response_model=JobRead)
+@router.post("/jobs/", response_model=JobRead)
 async def create_job(job: JobCreate, session: Session = Depends(get_session)) -> Job:
     new_job = Job(**job.model_dump(), created_at=datetime.now(), updated_at=datetime.now())
 
@@ -78,19 +73,19 @@ async def create_job(job: JobCreate, session: Session = Depends(get_session)) ->
 
     return new_job
 
-@app.delete("/jobs/{job_id}/", response_model=JobRead)
+@router.delete("/jobs/{job_id}/", response_model=JobRead)
 async def delete_job(job_id: uuid.UUID, session: Session = Depends(get_session)) -> Job:
     job = session.get(Job, job_id)
 
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    
+
     session.delete(job)
     session.commit()
 
     return job
 
-@app.patch("/jobs/{job_id}/", response_model=JobRead)
+@router.patch("/jobs/{job_id}/", response_model=JobRead)
 async def update_job(job_id: uuid.UUID, job: JobUpdate, session: Session = Depends(get_session)) -> Job:
     db_job = session.get(Job, job_id)
 
