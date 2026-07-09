@@ -20,6 +20,14 @@ class JobCreate(JobBase):
 class JobRead(JobBase):
     id: str
 
+class JobUpdate(SQLModel):
+    title: str | None = None
+    description: str | None = None
+    salary: int | None = None
+    location: str | None = None
+    company: str | None = None
+    company_location: str | None = None
+
 class SalaryRange(str, Enum):
     under_40k = "under_40k"
     range_40k_60k = "40k_60k"

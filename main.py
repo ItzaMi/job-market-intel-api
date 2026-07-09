@@ -4,7 +4,7 @@ from fastapi import Depends,FastAPI, HTTPException
 from sqlmodel import Session, select
 
 from database import get_session
-from models import Job, JobCreate, JobRead, JobFilters, SalaryRange
+from models import Job, JobCreate, JobRead, JobFilters, SalaryRange, JobUpdate
 
 
 app = FastAPI()
@@ -75,3 +75,19 @@ async def delete_job(job_id: str, session: Session = Depends(get_session)) -> Jo
     session.commit()
 
     return job
+
+@app.patch("/jobs/{job_id}/", response_model=JobRead)
+async def update_job(job_id: str, job: JobUpdate, session: Session = Depends(get_session)) -> Job:
+    db_job = session.get(Job, job_id)
+
+    if db_job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    for field, value in job.model_dump(exclude_unset=True).items():
+        setattr(db_job, field, value)
+
+    session.add(db_job)
+    session.commit()
+    session.refresh(db_job)
+
+    return db_job
