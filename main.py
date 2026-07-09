@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import uuid4
 
 from fastapi import Depends,FastAPI, HTTPException
@@ -56,7 +57,7 @@ async def get_job(job_id: str, session: Session = Depends(get_session)) -> Job:
 
 @app.post("/jobs/", response_model=JobRead)
 async def create_job(job: JobCreate, session: Session = Depends(get_session)) -> Job:
-    new_job = Job(id=str(uuid4()), **job.model_dump())
+    new_job = Job(id=str(uuid4()), **job.model_dump(), created_at=datetime.now(), updated_at=datetime.now())
 
     session.add(new_job)
     session.commit()
@@ -85,6 +86,8 @@ async def update_job(job_id: str, job: JobUpdate, session: Session = Depends(get
 
     for field, value in job.model_dump(exclude_unset=True).items():
         setattr(db_job, field, value)
+
+    db_job.updated_at = datetime.now()
 
     session.add(db_job)
     session.commit()

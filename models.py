@@ -1,3 +1,4 @@
+from datetime import datetime
 from sqlmodel import Field, SQLModel
 
 from pydantic import BaseModel, Field as PydanticField
@@ -13,12 +14,16 @@ class JobBase(SQLModel):
 
 class Job(JobBase, table=True):
     id: str = Field(primary_key=True)
+    created_at: datetime
+    updated_at: datetime
 
 class JobCreate(JobBase):
     pass
 
 class JobRead(JobBase):
     id: str
+    created_at: datetime
+    updated_at: datetime
 
 class JobUpdate(SQLModel):
     title: str | None = None
