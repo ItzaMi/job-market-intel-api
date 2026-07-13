@@ -60,3 +60,21 @@ class JobFilters(BaseModel):
     limit: int = PydanticField(default=10, ge=1, le=100)
     offset: int = PydanticField(default=0, ge=0)
     sort: SortBy = PydanticField(default=SortBy.created_at_desc)
+
+class IngestionStatus(str, Enum):
+    pending = "pending"
+    in_progress = "in_progress"
+    completed = "completed"
+    failed = "failed"
+
+class IngestionRun(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    source: str
+    status: IngestionStatus = Field(default=IngestionStatus.pending)
+    jobs_found: int = 0
+    jobs_created: int = 0
+    jobs_updated: int = 0
+    jobs_failed: int = 0
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime

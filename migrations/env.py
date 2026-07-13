@@ -8,7 +8,7 @@ from alembic import context
 from sqlmodel import SQLModel
 import os
 
-from job_market_intel.models import Job
+from job_market_intel.models import Job, IngestionRun
 
 
 # this is the Alembic Config object, which provides
