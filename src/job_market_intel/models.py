@@ -68,6 +68,7 @@ class IngestionStatus(str, Enum):
     failed = "failed"
 
 class IngestionRun(SQLModel, table=True):
+    __tablename__ = "ingestion_run"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     source: str
     status: IngestionStatus = Field(default=IngestionStatus.pending)
