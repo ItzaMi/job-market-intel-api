@@ -8,8 +8,8 @@ from job_market_intel.models import IngestionRun, IngestionStatus
 from job_market_intel.worker import celery_app
 
 @celery_app.task(name="ingest_jobs")
-def ingest_jobs_task(ingestion_run_id: str) -> None:
-    run_id = uuid.UUID(ingestion_run_id)
+def ingest_jobs_task(ingestion_run_id: str | uuid.UUID) -> None:
+    run_id = ingestion_run_id if isinstance(ingestion_run_id, uuid.UUID) else uuid.UUID(ingestion_run_id)
 
     with Session(engine) as session:
         run = session.get(IngestionRun, run_id)

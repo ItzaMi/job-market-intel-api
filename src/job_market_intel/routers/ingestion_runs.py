@@ -18,7 +18,7 @@ async def create_ingestion_run(source: str = "sample_json", session: Session = D
     session.commit()
     session.refresh(run)
 
-    ingest_jobs_task.delay(run.id)
+    ingest_jobs_task.delay(str(run.id))
 
     return run
 
