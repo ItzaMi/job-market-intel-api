@@ -1,21 +1,38 @@
-import os
+import uuid
+from datetime import datetime
 
-from celery import Celery
+from sqlmodel import Session
 
-broker_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-result_backend = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
+from job_market_intel.database import engine
+from job_market_intel.models import IngestionRun, IngestionStatus
+from job_market_intel.worker import celery_app
 
-app = Celery("job_market_intel", broker=broker_url, backend=result_backend)
+@celery_app.task(name="ingest_jobs")
+def ingest_jobs_task(ingestion_run_id: str) -> None:
+    run_id = uuid.UUID(ingestion_run_id)
 
-app.conf.update(
-    task_serializer="json",
-    result_serializer="json",
-    accept_content=["json"],
-    timezone="UTC",
-    enable_utc=True,
-)
+    with Session(engine) as session:
+        run = session.get(IngestionRun, run_id)
+        if run is None:
+            raise ValueError(f"Ingestion run with ID {run_id} not found")
+        
+        run.status = IngestionStatus.in_progress
+        run.updated_at = datetime.now()
+        session.add(run)
+        session.commit()
 
-
-@app.task
-def ping() -> str:
-    return "pong"
+        try:
+            run.jobs_found = 0
+            run.jobs_created = 0
+            run.status = IngestionStatus.completed
+            run.updated_at = datetime.now()
+            session.add(run)
+            session.commit()
+        
+        except Exception as e:
+            run.status = IngestionStatus.failed
+            run.error = str(e)
+            run.updated_at = datetime.now()
+            session.add(run)
+            session.commit()
+            raise

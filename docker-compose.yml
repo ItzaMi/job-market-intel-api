@@ -18,7 +18,7 @@ services:
     build: .
     volumes:
       - .:/app
-    command: uv run celery worker -A src.job_market_intel.tasks --loglevel=info
+    command: uv run celery -A job_market_intel.worker:celery_app worker --loglevel=info
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/job_market_intel
       CELERY_BROKER_URL: redis://redis:6379/0
