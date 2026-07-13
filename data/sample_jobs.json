@@ -1,0 +1,202 @@
+[
+  {
+    "title": "Senior Backend Engineer",
+    "description": "Design and scale APIs powering job search and recommendations for millions of users.",
+    "salary": 145000,
+    "location": "Remote",
+    "company": "TalentFlow",
+    "company_location": "San Francisco, CA"
+  },
+  {
+    "title": "Frontend Developer",
+    "description": "Build responsive dashboards and data visualizations with React and TypeScript.",
+    "salary": 98000,
+    "location": "Remote - US",
+    "company": "Chartlane",
+    "company_location": "Austin, TX"
+  },
+  {
+    "title": "Full Stack Engineer",
+    "description": "Own features end to end across FastAPI services and a Next.js client.",
+    "salary": 125000,
+    "location": "Hybrid - Lisbon",
+    "company": "NovaHire",
+    "company_location": "Lisbon, Portugal"
+  },
+  {
+    "title": "Data Engineer",
+    "description": "Maintain ingestion pipelines, warehouse models, and analytics-ready datasets.",
+    "salary": 132000,
+    "location": "Remote - EU",
+    "company": "PipelineIQ",
+    "company_location": "Berlin, Germany"
+  },
+  {
+    "title": "DevOps Engineer",
+    "description": "Improve CI/CD, observability, and infrastructure automation on AWS and Kubernetes.",
+    "salary": 138000,
+    "location": "Remote",
+    "company": "CloudSprint",
+    "company_location": "Seattle, WA"
+  },
+  {
+    "title": "Machine Learning Engineer",
+    "description": "Train and deploy ranking models for job matching and salary estimation.",
+    "salary": 165000,
+    "location": "Remote - US",
+    "company": "SignalHire AI",
+    "company_location": "New York, NY"
+  },
+  {
+    "title": "Product Designer",
+    "description": "Shape user flows for candidate profiles, alerts, and employer hiring tools.",
+    "salary": 112000,
+    "location": "Remote",
+    "company": "Workbench Studio",
+    "company_location": "Toronto, Canada"
+  },
+  {
+    "title": "QA Automation Engineer",
+    "description": "Expand test coverage across API contracts, background workers, and release pipelines.",
+    "salary": 105000,
+    "location": "Remote - UK",
+    "company": "ReleaseReady",
+    "company_location": "London, UK"
+  },
+  {
+    "title": "Platform Engineer",
+    "description": "Build internal developer tooling and shared services for product engineering teams.",
+    "salary": 152000,
+    "location": "Remote",
+    "company": "CoreLayer",
+    "company_location": "Denver, CO"
+  },
+  {
+    "title": "Junior Software Engineer",
+    "description": "Contribute to feature development with mentorship from senior engineers.",
+    "salary": 78000,
+    "location": "On-site - Porto",
+    "company": "Atlantic Apps",
+    "company_location": "Porto, Portugal"
+  },
+  {
+    "title": "Security Engineer",
+    "description": "Lead application security reviews, threat modeling, and incident response playbooks.",
+    "salary": 148000,
+    "location": "Remote - US",
+    "company": "ShieldOps",
+    "company_location": "Chicago, IL"
+  },
+  {
+    "title": "Technical Program Manager",
+    "description": "Coordinate cross-team delivery for marketplace search and ingestion initiatives.",
+    "salary": 135000,
+    "location": "Hybrid - Dublin",
+    "company": "MarketGrid",
+    "company_location": "Dublin, Ireland"
+  },
+  {
+    "title": "Mobile Engineer",
+    "description": "Ship iOS and Android features for job alerts, saved searches, and application tracking.",
+    "salary": 128000,
+    "location": "Remote",
+    "company": "PocketCareer",
+    "company_location": "Boston, MA"
+  },
+  {
+    "title": "Site Reliability Engineer",
+    "description": "Own uptime, capacity planning, and on-call practices for high-traffic services.",
+    "salary": 158000,
+    "location": "Remote - US",
+    "company": "Uptime Labs",
+    "company_location": "Atlanta, GA"
+  },
+  {
+    "title": "Analytics Engineer",
+    "description": "Model hiring funnel metrics and self-serve reporting for growth and product teams.",
+    "salary": 118000,
+    "location": "Remote - EU",
+    "company": "MetricLoop",
+    "company_location": "Amsterdam, Netherlands"
+  },
+  {
+    "title": "Engineering Manager",
+    "description": "Lead a squad building ingestion services, APIs, and data quality tooling.",
+    "salary": 175000,
+    "location": "Hybrid - San Francisco",
+    "company": "TalentFlow",
+    "company_location": "San Francisco, CA"
+  },
+  {
+    "title": "Customer Success Engineer",
+    "description": "Support enterprise integrations and troubleshoot API usage with technical accounts.",
+    "salary": 92000,
+    "location": "Remote",
+    "company": "HireBridge",
+    "company_location": "Miami, FL"
+  },
+  {
+    "title": "Rust Systems Engineer",
+    "description": "Optimize high-throughput ingestion workers and low-latency matching services.",
+    "salary": 170000,
+    "location": "Remote - Global",
+    "company": "FastMatch",
+    "company_location": "Zurich, Switzerland"
+  },
+  {
+    "title": "Python Backend Developer",
+    "description": "Extend FastAPI services, Celery workers, and PostgreSQL-backed job market features.",
+    "salary": 115000,
+    "location": "Remote - Portugal",
+    "company": "Iberia Data",
+    "company_location": "Lisbon, Portugal"
+  },
+  {
+    "title": "Growth Marketing Manager",
+    "description": "Run experiments across landing pages, email campaigns, and paid acquisition channels.",
+    "salary": 88000,
+    "location": "Remote - US",
+    "company": "LaunchPad HR",
+    "company_location": "Los Angeles, CA"
+  },
+  {
+    "title": "Staff Software Engineer",
+    "description": "Set technical direction for distributed ingestion, deduplication, and search indexing.",
+    "salary": 195000,
+    "location": "Remote",
+    "company": "OpenMarket Jobs",
+    "company_location": "Remote-first, US"
+  },
+  {
+    "title": "Support Engineer",
+    "description": "Investigate production issues, document fixes, and improve operational runbooks.",
+    "salary": 85000,
+    "location": "Remote - EMEA",
+    "company": "OpsNorth",
+    "company_location": "Copenhagen, Denmark"
+  },
+  {
+    "title": "Data Scientist",
+    "description": "Analyze labor market trends, remote work adoption, and compensation benchmarks.",
+    "salary": 142000,
+    "location": "Hybrid - London",
+    "company": "LaborLens",
+    "company_location": "London, UK"
+  },
+  {
+    "title": "Cloud Architect",
+    "description": "Design multi-region architecture for resilient job ingestion and search workloads.",
+    "salary": 182000,
+    "location": "Remote - US",
+    "company": "SkyStack",
+    "company_location": "Phoenix, AZ"
+  },
+  {
+    "title": "Technical Writer",
+    "description": "Create API docs, integration guides, and onboarding material for developer users.",
+    "salary": 79000,
+    "location": "Remote",
+    "company": "DocCraft",
+    "company_location": "Remote-first, Canada"
+  }
+]
