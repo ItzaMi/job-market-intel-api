@@ -3,6 +3,7 @@ from pathlib import Path
 import uuid
 from datetime import datetime
 
+from job_market_intel.utils.posting import apply_job_fields, get_job_by_fingerprint, make_fingerprint
 from sqlmodel import Session
 
 from job_market_intel.database import engine
@@ -16,12 +17,31 @@ def load_sample_jobs() -> list[JobCreate]:
         return [JobCreate.model_validate(job) for job in json.load(json_data)]
 
 def ingest_jobs(session: Session, jobs: list[JobCreate]) -> int:
+    created = 0
+    updated = 0
+    failed = 0
     now = datetime.now()
+
     for job in jobs:
-        db_job = Job(**job.model_dump(), created_at=now, updated_at=now)
-        session.add(db_job)
+        try:
+            fingerprint = make_fingerprint(job.source, job.external_id, job.source_url)
+            existing = get_job_by_fingerprint(session, fingerprint)
+
+            if existing:
+                apply_job_fields(existing, job)
+                existing.updated_at = now
+                session.add(existing)
+                updated += 1
+            else:
+                db_job = Job(**job.model_dump(), created_at=now, updated_at=now, fingerprint=fingerprint)
+                session.add(db_job)
+                created += 1
+
+        except Exception:
+            failed += 1
+
     session.commit()
-    return len(jobs)
+    return created, updated, failed
 
 @celery_app.task(name="ingest_jobs")
 def ingest_jobs_task(ingestion_run_id: str | uuid.UUID) -> None:
@@ -39,9 +59,11 @@ def ingest_jobs_task(ingestion_run_id: str | uuid.UUID) -> None:
 
         try:
             jobs = load_sample_jobs()
-            created_count = ingest_jobs(session, jobs)
+            created, updated, failed = ingest_jobs(session, jobs)
             run.jobs_found = len(jobs)
-            run.jobs_created = created_count
+            run.jobs_created = created
+            run.jobs_updated = updated
+            run.jobs_failed = failed
             run.status = IngestionStatus.completed
             run.updated_at = datetime.now()
             session.add(run)

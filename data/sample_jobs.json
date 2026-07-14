@@ -1,5 +1,8 @@
 [
   {
+    "source": "sample_json",
+    "external_id": "talentflow-senior-backend-001",
+    "source_url": "https://jobs.example.com/sample_json/talentflow-senior-backend-001",
     "title": "Senior Backend Engineer",
     "description": "Design and scale APIs powering job search and recommendations for millions of users.",
     "salary": 145000,
@@ -8,6 +11,9 @@
     "company_location": "San Francisco, CA"
   },
   {
+    "source": "sample_json",
+    "external_id": "chartlane-frontend-002",
+    "source_url": "https://jobs.example.com/sample_json/chartlane-frontend-002",
     "title": "Frontend Developer",
     "description": "Build responsive dashboards and data visualizations with React and TypeScript.",
     "salary": 98000,
@@ -16,6 +22,9 @@
     "company_location": "Austin, TX"
   },
   {
+    "source": "sample_json",
+    "external_id": "novahire-fullstack-003",
+    "source_url": "https://jobs.example.com/sample_json/novahire-fullstack-003",
     "title": "Full Stack Engineer",
     "description": "Own features end to end across FastAPI services and a Next.js client.",
     "salary": 125000,
@@ -24,6 +33,9 @@
     "company_location": "Lisbon, Portugal"
   },
   {
+    "source": "sample_json",
+    "external_id": "pipelineiq-data-engineer-004",
+    "source_url": "https://jobs.example.com/sample_json/pipelineiq-data-engineer-004",
     "title": "Data Engineer",
     "description": "Maintain ingestion pipelines, warehouse models, and analytics-ready datasets.",
     "salary": 132000,
@@ -32,6 +44,9 @@
     "company_location": "Berlin, Germany"
   },
   {
+    "source": "sample_json",
+    "external_id": "cloudsprint-devops-005",
+    "source_url": "https://jobs.example.com/sample_json/cloudsprint-devops-005",
     "title": "DevOps Engineer",
     "description": "Improve CI/CD, observability, and infrastructure automation on AWS and Kubernetes.",
     "salary": 138000,
@@ -40,6 +55,9 @@
     "company_location": "Seattle, WA"
   },
   {
+    "source": "sample_json",
+    "external_id": "signalhire-ml-engineer-006",
+    "source_url": "https://jobs.example.com/sample_json/signalhire-ml-engineer-006",
     "title": "Machine Learning Engineer",
     "description": "Train and deploy ranking models for job matching and salary estimation.",
     "salary": 165000,
@@ -48,6 +66,9 @@
     "company_location": "New York, NY"
   },
   {
+    "source": "sample_json",
+    "external_id": "workbench-product-designer-007",
+    "source_url": "https://jobs.example.com/sample_json/workbench-product-designer-007",
     "title": "Product Designer",
     "description": "Shape user flows for candidate profiles, alerts, and employer hiring tools.",
     "salary": 112000,
@@ -56,6 +77,9 @@
     "company_location": "Toronto, Canada"
   },
   {
+    "source": "sample_json",
+    "external_id": "releaseready-qa-automation-008",
+    "source_url": "https://jobs.example.com/sample_json/releaseready-qa-automation-008",
     "title": "QA Automation Engineer",
     "description": "Expand test coverage across API contracts, background workers, and release pipelines.",
     "salary": 105000,
@@ -64,6 +88,9 @@
     "company_location": "London, UK"
   },
   {
+    "source": "sample_json",
+    "external_id": "corelayer-platform-engineer-009",
+    "source_url": "https://jobs.example.com/sample_json/corelayer-platform-engineer-009",
     "title": "Platform Engineer",
     "description": "Build internal developer tooling and shared services for product engineering teams.",
     "salary": 152000,
@@ -72,6 +99,9 @@
     "company_location": "Denver, CO"
   },
   {
+    "source": "sample_json",
+    "external_id": "atlanticapps-junior-engineer-010",
+    "source_url": "https://jobs.example.com/sample_json/atlanticapps-junior-engineer-010",
     "title": "Junior Software Engineer",
     "description": "Contribute to feature development with mentorship from senior engineers.",
     "salary": 78000,
@@ -80,6 +110,9 @@
     "company_location": "Porto, Portugal"
   },
   {
+    "source": "sample_json",
+    "external_id": "shieldops-security-engineer-011",
+    "source_url": "https://jobs.example.com/sample_json/shieldops-security-engineer-011",
     "title": "Security Engineer",
     "description": "Lead application security reviews, threat modeling, and incident response playbooks.",
     "salary": 148000,
@@ -88,6 +121,9 @@
     "company_location": "Chicago, IL"
   },
   {
+    "source": "sample_json",
+    "external_id": "marketgrid-tpm-012",
+    "source_url": "https://jobs.example.com/sample_json/marketgrid-tpm-012",
     "title": "Technical Program Manager",
     "description": "Coordinate cross-team delivery for marketplace search and ingestion initiatives.",
     "salary": 135000,
@@ -96,6 +132,9 @@
     "company_location": "Dublin, Ireland"
   },
   {
+    "source": "sample_json",
+    "external_id": "pocketcareer-mobile-engineer-013",
+    "source_url": "https://jobs.example.com/sample_json/pocketcareer-mobile-engineer-013",
     "title": "Mobile Engineer",
     "description": "Ship iOS and Android features for job alerts, saved searches, and application tracking.",
     "salary": 128000,
@@ -104,6 +143,9 @@
     "company_location": "Boston, MA"
   },
   {
+    "source": "sample_json",
+    "external_id": "uptimelabs-sre-014",
+    "source_url": "https://jobs.example.com/sample_json/uptimelabs-sre-014",
     "title": "Site Reliability Engineer",
     "description": "Own uptime, capacity planning, and on-call practices for high-traffic services.",
     "salary": 158000,
@@ -112,6 +154,9 @@
     "company_location": "Atlanta, GA"
   },
   {
+    "source": "sample_json",
+    "external_id": "metricloop-analytics-engineer-015",
+    "source_url": "https://jobs.example.com/sample_json/metricloop-analytics-engineer-015",
     "title": "Analytics Engineer",
     "description": "Model hiring funnel metrics and self-serve reporting for growth and product teams.",
     "salary": 118000,
@@ -120,6 +165,9 @@
     "company_location": "Amsterdam, Netherlands"
   },
   {
+    "source": "sample_json",
+    "external_id": "talentflow-eng-manager-016",
+    "source_url": "https://jobs.example.com/sample_json/talentflow-eng-manager-016",
     "title": "Engineering Manager",
     "description": "Lead a squad building ingestion services, APIs, and data quality tooling.",
     "salary": 175000,
@@ -128,6 +176,9 @@
     "company_location": "San Francisco, CA"
   },
   {
+    "source": "sample_json",
+    "external_id": "hirebridge-cs-engineer-017",
+    "source_url": "https://jobs.example.com/sample_json/hirebridge-cs-engineer-017",
     "title": "Customer Success Engineer",
     "description": "Support enterprise integrations and troubleshoot API usage with technical accounts.",
     "salary": 92000,
@@ -136,6 +187,9 @@
     "company_location": "Miami, FL"
   },
   {
+    "source": "sample_json",
+    "external_id": "fastmatch-rust-engineer-018",
+    "source_url": "https://jobs.example.com/sample_json/fastmatch-rust-engineer-018",
     "title": "Rust Systems Engineer",
     "description": "Optimize high-throughput ingestion workers and low-latency matching services.",
     "salary": 170000,
@@ -144,6 +198,9 @@
     "company_location": "Zurich, Switzerland"
   },
   {
+    "source": "sample_json",
+    "external_id": "iberiadata-python-backend-019",
+    "source_url": "https://jobs.example.com/sample_json/iberiadata-python-backend-019",
     "title": "Python Backend Developer",
     "description": "Extend FastAPI services, Celery workers, and PostgreSQL-backed job market features.",
     "salary": 115000,
@@ -152,6 +209,9 @@
     "company_location": "Lisbon, Portugal"
   },
   {
+    "source": "sample_json",
+    "external_id": "launchpad-growth-marketing-020",
+    "source_url": "https://jobs.example.com/sample_json/launchpad-growth-marketing-020",
     "title": "Growth Marketing Manager",
     "description": "Run experiments across landing pages, email campaigns, and paid acquisition channels.",
     "salary": 88000,
@@ -160,6 +220,9 @@
     "company_location": "Los Angeles, CA"
   },
   {
+    "source": "sample_json",
+    "external_id": "openmarket-staff-engineer-021",
+    "source_url": "https://jobs.example.com/sample_json/openmarket-staff-engineer-021",
     "title": "Staff Software Engineer",
     "description": "Set technical direction for distributed ingestion, deduplication, and search indexing.",
     "salary": 195000,
@@ -168,6 +231,9 @@
     "company_location": "Remote-first, US"
   },
   {
+    "source": "sample_json",
+    "external_id": "opsnorth-support-engineer-022",
+    "source_url": "https://jobs.example.com/sample_json/opsnorth-support-engineer-022",
     "title": "Support Engineer",
     "description": "Investigate production issues, document fixes, and improve operational runbooks.",
     "salary": 85000,
@@ -176,6 +242,9 @@
     "company_location": "Copenhagen, Denmark"
   },
   {
+    "source": "sample_json",
+    "external_id": "laborlens-data-scientist-023",
+    "source_url": "https://jobs.example.com/sample_json/laborlens-data-scientist-023",
     "title": "Data Scientist",
     "description": "Analyze labor market trends, remote work adoption, and compensation benchmarks.",
     "salary": 142000,
@@ -184,6 +253,9 @@
     "company_location": "London, UK"
   },
   {
+    "source": "sample_json",
+    "external_id": "skystack-cloud-architect-024",
+    "source_url": "https://jobs.example.com/sample_json/skystack-cloud-architect-024",
     "title": "Cloud Architect",
     "description": "Design multi-region architecture for resilient job ingestion and search workloads.",
     "salary": 182000,
@@ -192,6 +264,9 @@
     "company_location": "Phoenix, AZ"
   },
   {
+    "source": "sample_json",
+    "external_id": "doccraft-technical-writer-025",
+    "source_url": "https://jobs.example.com/sample_json/doccraft-technical-writer-025",
     "title": "Technical Writer",
     "description": "Create API docs, integration guides, and onboarding material for developer users.",
     "salary": 79000,

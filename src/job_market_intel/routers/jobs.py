@@ -2,6 +2,7 @@ from datetime import datetime
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from job_market_intel.utils.posting import get_job_by_fingerprint, make_fingerprint
 from sqlmodel import Session, select
 
 from ..database import get_session
@@ -65,8 +66,15 @@ async def get_job(job_id: uuid.UUID, session: Session = Depends(get_session)) ->
 
 @router.post("/jobs/", response_model=JobRead)
 async def create_job(job: JobCreate, session: Session = Depends(get_session)) -> Job:
-    new_job = Job(**job.model_dump(), created_at=datetime.now(), updated_at=datetime.now())
+    now = datetime.now()
+    fingerprint = make_fingerprint(job.source, job.external_id, job.source_url)
 
+    existing = get_job_by_fingerprint(session, fingerprint)
+    if existing:
+        raise HTTPException(status_code=400, detail="Job already exists")
+
+    new_job = Job(**job.model_dump(), created_at=now, updated_at=now, fingerprint=fingerprint)
+    
     session.add(new_job)
     session.commit()
     session.refresh(new_job)
