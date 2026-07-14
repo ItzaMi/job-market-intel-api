@@ -9,6 +9,11 @@ from enum import Enum
 TextField = Annotated[str, Field(min_length=1, max_length=120)]
 FilterText = Annotated[str, Field(min_length=1, max_length=120)]
 
+class JobPostingIdentity(SQLModel):
+    source: str
+    external_id: str | None
+    source_url: str | None
+
 class JobBase(SQLModel):
     title: TextField
     description: str | None = Field(default=None, max_length=5000)
@@ -17,18 +22,19 @@ class JobBase(SQLModel):
     company: TextField
     company_location: TextField
 
-class Job(JobBase, table=True):
+class Job(JobBase, JobPostingIdentity, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     created_at: datetime
     updated_at: datetime
+    fingerprint: str = Field(unique=True, index=True, max_length=255)
 
-class JobCreate(JobBase):
+class JobCreate(JobBase, JobPostingIdentity):
     pass
-
-class JobRead(JobBase):
+class JobRead(JobBase, JobPostingIdentity):
     id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+    fingerprint: str
 
 class JobUpdate(SQLModel):
     title: TextField | None = None
