@@ -1,6 +1,6 @@
 # Job Market Intel API
 
-A FastAPI service for managing job listings. Data is persisted in PostgreSQL via SQLModel, with schema changes managed by Alembic.
+A FastAPI service for collecting, ingesting, and querying job listings. Data is persisted in PostgreSQL via SQLModel, background ingestion runs through Celery + Redis, and schema changes are managed by Alembic.
 
 ## Stack
 
@@ -8,6 +8,8 @@ A FastAPI service for managing job listings. Data is persisted in PostgreSQL via
 - **SQLModel** — ORM and request/response models
 - **PostgreSQL 17** — database (via Docker)
 - **Alembic** — migrations
+- **Celery** — background job ingestion
+- **Redis** — Celery broker and result backend
 - **uv** — dependency and project management
 
 ## Prerequisites
@@ -18,7 +20,7 @@ A FastAPI service for managing job listings. Data is persisted in PostgreSQL via
 
 ## Quick start (Docker)
 
-Start the API and Postgres together:
+Start the API, worker, Redis, and Postgres together:
 
 ```bash
 docker compose up --build
@@ -51,6 +53,69 @@ Postgres is exposed on `localhost:5432` with:
 | User     | `postgres`         |
 | Password | `postgres`         |
 
+## Architecture
+
+The codebase is split into layers so HTTP, business logic, and data sources stay separate:
+
+```
+HTTP request
+    ↓
+routers/          ← validate input, call services, return responses
+    ↓
+services/         ← business rules (e.g. deduplication, bulk ingest)
+    ↓
+loaders/          ← fetch + normalize data from external sources
+    ↓
+PostgreSQL
+```
+
+Background ingestion follows a similar path:
+
+```
+POST /ingestion-runs/
+    ↓
+Celery task (tasks.py)   ← queued in Redis, picked up by worker
+    ↓
+loader for that source
+    ↓
+services/ingestion.py    ← upsert jobs by fingerprint
+    ↓
+PostgreSQL
+```
+
+### Job identity & deduplication
+
+Each job comes from a **source** (`sample_json`, `arbeitnow`, …) and is identified by `external_id` or `source_url`. The API builds a **fingerprint** from those fields and stores it as a unique column. Re-ingesting the same posting updates the existing row instead of creating a duplicate.
+
+## Roadmap
+
+Things to tackle later, roughly in priority order. Each item came from code review / production-readiness feedback.
+
+| # | Topic | What it means | Why it matters |
+|---|-------|---------------|----------------|
+| 1 | **Fix async/sync mismatch** | Routes are `async def` but DB calls are sync — either switch routes to `def` or adopt `AsyncSession` + `asyncpg` | Sync DB inside async routes blocks the event loop under load |
+| 2 | **Database indexes** | Add indexes on columns we filter/sort (`salary`, `created_at`, `title`, …) | `ILIKE '%engineer%'` on 100k rows becomes a full table scan without indexes |
+| 3 | **Full-text search** | PostgreSQL `tsvector` / `pg_trgm`, or semantic search with embeddings | Better search than partial `ILIKE` matches |
+| 4 | **Production Docker** | Multi-stage builds, smaller images, Gunicorn + Uvicorn workers | `fastapi dev` is for development only |
+| 5 | **Celery depth** | Multiple queues, retries, Flower dashboard | Visibility and control over background jobs |
+| 6 | **Integration tests** | Testcontainers for real Postgres + Redis in CI | SQLite tests miss Postgres-specific behaviour |
+| 7 | **Clean Architecture** | Repository + service layers for jobs CRUD (like ingestion already has) | Thinner routers, easier testing, SOLID |
+| 8 | **Load balancing** | Multiple API replicas behind a reverse proxy | Horizontal scaling once async + indexes are in place |
+
+### Database indexes — quick primer
+
+Think of a table like a spreadsheet. Without an index, Postgres reads **every row** to find matches (a *sequential scan*). With 20 rows that is instant; with 100,000 rows it is slow.
+
+An **index** is a separate sorted lookup structure — like the index at the back of a book. It lets Postgres jump straight to matching rows.
+
+| Query pattern | Index type | Example |
+|---------------|------------|---------|
+| Exact match / sort | B-tree (default) | `WHERE salary >= 80000 ORDER BY created_at DESC` |
+| Partial text (`%engineer%`) | `pg_trgm` GIN | `WHERE title ILIKE '%engineer%'` |
+| Full-text search | `tsvector` GIN | `WHERE search_vector @@ plainto_tsquery('python remote')` |
+
+We already have a unique index on `fingerprint`. Filters on `title`, `company`, `location`, and sorts on `salary` / timestamps do not have indexes yet — that is item **#2** on the roadmap.
+
 ## Docker, Postgres & Alembic
 
 This project splits responsibilities across two concerns:
@@ -64,7 +129,9 @@ The API reads/writes data through SQLModel, but it does **not** create or alter 
 
 ### How the services connect
 
-- **`api`** — runs FastAPI. Code is bind-mounted from project folder (`.:/app`), so Python file edits are picked up by the dev server without rebuilding the image.
+- **`api`** — runs FastAPI. Code is bind-mounted from the project folder (`.:/app`), so Python file edits are picked up by the dev server without rebuilding the image.
+- **`worker`** — runs a Celery worker that processes ingestion tasks from Redis.
+- **`redis`** — message broker and result store for Celery.
 - **`db`** — runs Postgres 17. Data lives in the named volume `postgres_data`, so it survives `docker compose down` and container restarts.
 - **Alembic** — runs as a one-off command inside the `api` container (or locally with `uv`). It connects to the same Postgres instance and applies SQL from `migrations/versions/`.
 
@@ -270,25 +337,36 @@ docker compose run --rm api uv run pytest
 
 ## API endpoints
 
-| Method   | Path              | Description                          |
-|----------|-------------------|--------------------------------------|
-| `GET`    | `/health/`        | Health check                         |
-| `GET`    | `/jobs/`          | List jobs (supports filters below)   |
-| `POST`   | `/jobs/`          | Create a job                         |
-| `GET`    | `/jobs/{job_id}/` | Get a job by ID                      |
-| `DELETE` | `/jobs/{job_id}/` | Delete a job by ID                   |
+| Method   | Path                        | Description                              |
+|----------|-----------------------------|------------------------------------------|
+| `GET`    | `/health/`                  | Health check                             |
+| `GET`    | `/jobs/`                    | List jobs (supports filters below)       |
+| `POST`   | `/jobs/`                    | Create a job                             |
+| `GET`    | `/jobs/{job_id}/`           | Get a job by ID                          |
+| `PATCH`  | `/jobs/{job_id}/`           | Update a job (partial)                   |
+| `DELETE` | `/jobs/{job_id}/`           | Delete a job by ID                       |
+| `POST`   | `/ingestion-runs/`          | Start a background ingestion run         |
+| `GET`    | `/ingestion-runs/{run_id}/` | Get ingestion run status and counters    |
 
 ### Job fields
 
-| Field              | Type   | Required | Notes                |
-|--------------------|--------|----------|----------------------|
-| `title`            | string | yes      |                      |
-| `description`      | string | no       |                      |
-| `salary`           | int    | yes      | Annual salary in USD |
-| `location`         | string | yes      |                      |
-| `company`          | string | yes      |                      |
-| `company_location` | string | yes      |                      |
-| `id`               | string | —        | UUID, set by the API |
+| Field              | Type   | Required | Notes                                      |
+|--------------------|--------|----------|--------------------------------------------|
+| `source`           | enum   | yes      | `sample_json` or `arbeitnow`               |
+| `external_id`      | string | no*      | ID from the upstream job board             |
+| `source_url`       | string | no*      | Canonical URL of the posting               |
+| `title`            | string | yes      |                                            |
+| `description`      | string | no       |                                            |
+| `salary`           | int    | yes      | Annual salary in USD                       |
+| `location`         | string | yes      |                                            |
+| `company`          | string | yes      |                                            |
+| `company_location` | string | yes      |                                            |
+| `id`               | UUID   | —        | Set by the API                             |
+| `fingerprint`      | string | —        | Set by the API (`source:external_id`)      |
+| `created_at`       | datetime | —      | Set by the API                             |
+| `updated_at`       | datetime | —      | Set by the API                             |
+
+\* At least one of `external_id` or `source_url` is required so the API can deduplicate postings.
 
 ### List filters (`GET /jobs/`)
 
@@ -300,8 +378,9 @@ All filters are optional and can be combined.
 | `company`      | string | Case-insensitive partial match on company name   |
 | `location`     | string | Case-insensitive partial match on job location   |
 | `salary_range` | enum   | One of: `under_40k`, `40k_60k`, `60k_80k`, `80k_plus` |
-| `limit`        | int    | Max results to return (default: `10`)            |
-| `offset`       | int    | Number of results to skip (default: `0`)         |
+| `sort`         | enum   | One of: `created_at_asc`, `created_at_desc`, `updated_at_asc`, `updated_at_desc`, `salary_asc`, `salary_desc` (default: `created_at_desc`) |
+| `limit`        | int    | Max results to return (default: `10`, max: `100`)    |
+| `offset`       | int    | Number of results to skip (default: `0`)               |
 
 Salary range values:
 
@@ -338,6 +417,9 @@ curl "http://127.0.0.1:8000/jobs/?title=engineer&location=remote&salary_range=80
 curl -X POST http://127.0.0.1:8000/jobs/ \
   -H "Content-Type: application/json" \
   -d '{
+    "source": "sample_json",
+    "external_id": "acme-senior-backend-001",
+    "source_url": "https://jobs.example.com/sample_json/acme-senior-backend-001",
     "title": "Senior Backend Engineer",
     "description": "Build and scale our API platform",
     "salary": 120000,
@@ -369,6 +451,26 @@ curl http://127.0.0.1:8000/jobs/550e8400-e29b-41d4-a716-446655440000/
 curl -X DELETE http://127.0.0.1:8000/jobs/{job_id}/
 ```
 
+### Start an ingestion run
+
+Loads jobs from a data source in the background (requires the `worker` service running):
+
+```bash
+# Default source: sample_json (reads data/sample_jobs.json)
+curl -X POST http://127.0.0.1:8000/ingestion-runs/
+
+# Pick a source explicitly
+curl -X POST "http://127.0.0.1:8000/ingestion-runs/?source=sample_json"
+```
+
+Response includes a `run_id`. Poll status with:
+
+```bash
+curl http://127.0.0.1:8000/ingestion-runs/{run_id}/
+```
+
+An ingestion run tracks: `status` (`pending` → `in_progress` → `completed` / `failed`), `jobs_found`, `jobs_created`, `jobs_updated`, `jobs_failed`, and `error` if something went wrong.
+
 ## Example workflow
 
 ```bash
@@ -380,6 +482,9 @@ docker compose run --rm api uv run alembic upgrade head
 curl -s -X POST http://127.0.0.1:8000/jobs/ \
   -H "Content-Type: application/json" \
   -d '{
+    "source": "sample_json",
+    "external_id": "startup-frontend-001",
+    "source_url": "https://jobs.example.com/sample_json/startup-frontend-001",
     "title": "Frontend Developer",
     "salary": 95000,
     "location": "Lisbon",
@@ -387,35 +492,55 @@ curl -s -X POST http://127.0.0.1:8000/jobs/ \
     "company_location": "Lisbon, Portugal"
   }'
 
-# 3. List all jobs
+# 3. Or ingest many jobs at once from sample_json
+curl -s -X POST http://127.0.0.1:8000/ingestion-runs/
+
+# 4. List all jobs
 curl http://127.0.0.1:8000/jobs/
 
-# 4. Filter by company and salary band
+# 5. Filter by company and salary band
 curl "http://127.0.0.1:8000/jobs/?company=startup&salary_range=80k_plus"
 
-# 5. Get one job (use the id from step 2)
+# 6. Get one job (use the id from step 2)
 curl http://127.0.0.1:8000/jobs/YOUR_JOB_ID_HERE/
 ```
 
 ## Project layout
 
 ```
-├── main.py              # FastAPI routes
-├── models.py            # SQLModel schemas and filter models
-├── database.py          # Engine and session dependency
-├── docker-compose.yml   # API + Postgres services
-├── DOCKERFILE
+├── src/job_market_intel/
+│   ├── main.py              # FastAPI app entry point
+│   ├── database.py          # Engine and session dependency
+│   ├── models.py            # SQLModel schemas and filter models
+│   ├── tasks.py             # Celery tasks (ingestion orchestration)
+│   ├── worker.py            # Celery app configuration
+│   ├── routers/
+│   │   ├── jobs.py          # Jobs CRUD + list filters
+│   │   └── ingestion_runs.py
+│   ├── services/
+│   │   └── ingestion.py     # Bulk upsert logic
+│   ├── loaders/
+│   │   ├── sample_json.py   # Loads data/sample_jobs.json
+│   │   └── arbeitnow.py     # Arbeitnow API loader (stub)
+│   └── utils/
+│       └── posting.py       # Fingerprint + dedup helpers
+├── data/
+│   └── sample_jobs.json     # Sample data for ingestion
+├── docker-compose.yml       # API + worker + Redis + Postgres
+├── Dockerfile
 ├── alembic.ini
-├── migrations/          # Alembic migration scripts
+├── migrations/              # Alembic migration scripts
 └── tests/
-    ├── conftest.py      # Test DB setup and fixtures
-    └── test_main.py     # API tests
+    ├── conftest.py          # Test DB setup and fixtures
+    └── test_main.py         # API tests
 ```
 
 ## Environment variables
 
-| Variable       | Description                  | Set by |
-|----------------|------------------------------|--------|
-| `DATABASE_URL` | SQLAlchemy connection string | `docker-compose.yml` for the `api` service; you must export it yourself when running `uv` on the host |
+| Variable                 | Description                         | Set by |
+|--------------------------|-------------------------------------|--------|
+| `DATABASE_URL`           | SQLAlchemy connection string        | `docker-compose.yml` for `api` and `worker`; export when running `uv` on the host |
+| `CELERY_BROKER_URL`      | Redis URL for Celery task queue     | `docker-compose.yml` |
+| `CELERY_RESULT_BACKEND`  | Redis URL for Celery task results   | `docker-compose.yml` |
 
 See [Database URLs](#database-urls) for the exact values to use inside Docker vs on your machine.

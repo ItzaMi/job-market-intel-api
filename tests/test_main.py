@@ -2,6 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 JOB_PAYLOAD = {
+    "source": "sample_json",
+    "external_id": "acme-senior-backend-001",
+    "source_url": "https://jobs.example.com/sample_json/acme-senior-backend-001",
     "title": "Senior Backend Engineer",
     "description": "Build and scale our API platform",
     "salary": 100000,
@@ -35,6 +38,9 @@ def test_create_job(client: TestClient):
 
     data = response.json()
     assert data.pop("id")
+    assert data.pop("created_at")
+    assert data.pop("updated_at")
+    assert data.pop("fingerprint")
     assert data == JOB_PAYLOAD
 
 
@@ -65,7 +71,15 @@ def test_create_job_invalid_payload(client: TestClient):
 
 def test_list_multiple_jobs(client: TestClient):
     client.post("/jobs/", json=JOB_PAYLOAD)
-    client.post("/jobs/", json={**JOB_PAYLOAD, "title": "Second Job"})
+    client.post(
+        "/jobs/",
+        json={
+            **JOB_PAYLOAD,
+            "title": "Second Job",
+            "external_id": "acme-second-job-002",
+            "source_url": "https://jobs.example.com/sample_json/acme-second-job-002",
+        },
+    )
     assert len(client.get("/jobs/").json()) == 2
 
 
@@ -155,7 +169,12 @@ def test_pagination(client: TestClient):
     for index in range(3):
         client.post(
             "/jobs/",
-            json={**JOB_PAYLOAD, "title": f"Job {index}"},
+            json={
+                **JOB_PAYLOAD,
+                "title": f"Job {index}",
+                "external_id": f"acme-pagination-{index:03d}",
+                "source_url": f"https://jobs.example.com/sample_json/acme-pagination-{index:03d}",
+            },
         )
 
     page = client.get("/jobs/", params={"limit": 2, "offset": 1})

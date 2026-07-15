@@ -1,7 +1,9 @@
 import os
 
-# Set before test modules import the app (DATABASE_URL is required at import time).
+# Set before test modules import the app (required at import time).
 os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ.setdefault("CELERY_BROKER_URL", "redis://localhost:6379/0")
+os.environ.setdefault("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
 
 from sqlalchemy.pool import StaticPool
 import pytest
