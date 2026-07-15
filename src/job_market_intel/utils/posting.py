@@ -4,10 +4,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from job_market_intel.models import Job, JobCreate, JobSource
 
 def make_fingerprint(source: JobSource, external_id: str | None, source_url: str | None) -> str:
+    # Use .value — f"{source}" formats as "JobSource.sample_json", not "sample_json"
     if external_id:
-        return f"{source}:{external_id}"
+        return f"{source.value}:{external_id}"
     if source_url:
-        return f"{source}:{source_url}"
+        return f"{source.value}:{source_url}"
     raise ValueError("Posting must have external_id or source_url")
 
 def get_job_by_fingerprint(session: Session, fingerprint: str) -> Job | None:

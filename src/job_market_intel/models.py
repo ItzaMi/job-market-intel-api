@@ -1,17 +1,27 @@
 from datetime import datetime
 from typing import Annotated
 import uuid
-from sqlmodel import Field, SQLModel
+from enum import Enum
 
 from pydantic import BaseModel, Field as PydanticField
-from enum import Enum
+from sqlalchemy import Column, Enum as SAEnum
+from sqlmodel import Field, SQLModel
 
 TextField = Annotated[str, Field(min_length=1, max_length=120)]
 FilterText = Annotated[str, Field(min_length=1, max_length=120)]
 
+def _str_enum(enum_cls: type[Enum]) -> SAEnum:
+    """Store Python enums as plain VARCHAR — matches our Alembic migrations."""
+    return SAEnum(
+        enum_cls,
+        values_callable=lambda members: [member.value for member in members],
+        native_enum=False,
+    )
+
 class JobSource(str, Enum):
     sample_json = "sample_json"
     arbeitnow = "arbeitnow"
+
 class JobPostingIdentity(SQLModel):
     source: JobSource
     external_id: str | None
@@ -25,6 +35,8 @@ class JobBase(SQLModel):
     company_location: TextField
 
 class Job(JobBase, JobPostingIdentity, table=True):
+    # Override: DB column is VARCHAR, not a Postgres ENUM type named "jobsource"
+    source: JobSource = Field(sa_column=Column(_str_enum(JobSource), nullable=False))
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     created_at: datetime
     updated_at: datetime
@@ -69,8 +81,11 @@ class IngestionStatus(str, Enum):
 class IngestionRun(SQLModel, table=True):
     __tablename__ = "ingestion_run"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    source: JobSource
-    status: IngestionStatus = Field(default=IngestionStatus.pending)
+    source: JobSource = Field(sa_column=Column(_str_enum(JobSource), nullable=False))
+    status: IngestionStatus = Field(
+        default=IngestionStatus.pending,
+        sa_column=Column(_str_enum(IngestionStatus), nullable=False),
+    )
     jobs_found: int = 0
     jobs_created: int = 0
     jobs_updated: int = 0
