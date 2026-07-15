@@ -3,11 +3,11 @@ import logging
 from sqlmodel import Session
 
 from job_market_intel.utils.posting import apply_job_fields, get_job_by_fingerprint, make_fingerprint
-from job_market_intel.models import Job, JobCreate
+from job_market_intel.models import  Job, JobCreate
 
 logger = logging.getLogger(__name__)
 
-def ingest_jobs(session: Session, jobs: list[JobCreate]) -> tuple[int, int, int]:
+def ingest(session: Session, jobs: list[JobCreate]) -> tuple[int, int, int]:
     created = 0
     updated = 0
     failed = 0

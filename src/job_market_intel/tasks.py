@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlmodel import Session
 
-from job_market_intel.services.ingestion import ingest_jobs
+from job_market_intel.services import ingestion as ingestion_service
 from job_market_intel.loaders import get_loader
 from job_market_intel.database import engine
 from job_market_intel.models import IngestionRun, IngestionStatus
@@ -26,7 +26,7 @@ def ingest_jobs_task(ingestion_run_id: str | uuid.UUID) -> None:
         try:
             loader = get_loader(run.source)
             jobs = loader()
-            created, updated, failed = ingest_jobs(session, jobs)
+            created, updated, failed = ingestion_service.ingest(session, jobs)
             run.jobs_found = len(jobs)
             run.jobs_created = created
             run.jobs_updated = updated
