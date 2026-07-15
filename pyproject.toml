@@ -5,19 +5,24 @@ description = "A FastAPI/PostgreSQL API for tracking job listings and analyzing 
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "aiosqlite>=0.22.1",
     "alembic>=1.18.5",
+    "asyncpg>=0.31.0",
     "celery>=5.6.3",
     "fastapi[standard]>=0.139.0",
+    "greenlet>=3.5.3",
     "httpx>=0.28.1",
     "psycopg[binary]>=3.3.4",
     "pydantic>=2.13.4",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "redis>=6.4.0",
     "sqlmodel>=0.0.39",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+asyncio_mode = "auto"
 
 [tool.uv]
 package = true

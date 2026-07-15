@@ -33,6 +33,7 @@ class Job(JobBase, JobPostingIdentity, table=True):
 
 class JobCreate(JobBase, JobPostingIdentity):
     pass
+
 class JobRead(JobBase, JobPostingIdentity):
     id: uuid.UUID
     created_at: datetime

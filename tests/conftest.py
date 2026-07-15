@@ -5,20 +5,21 @@ os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("CELERY_BROKER_URL", "redis://localhost:6379/0")
 os.environ.setdefault("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
 
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlmodel import SQLModel, create_engine
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from job_market_intel import database
 from job_market_intel.database import get_session
 from job_market_intel.main import app
-from job_market_intel.models import Job
 
-IS_SQLITE = os.environ["DATABASE_URL"].startswith("sqlite")
+ASYNC_TEST_URL = "sqlite+aiosqlite://"
 
 
-def _make_engine(url: str):
+def _make_sync_engine(url: str):
     if url.startswith("sqlite"):
         return create_engine(
             url,
@@ -29,31 +30,36 @@ def _make_engine(url: str):
     return create_engine(url, echo=False)
 
 
-database.engine = _make_engine(os.environ["DATABASE_URL"])
+def _make_async_engine():
+    return create_async_engine(
+        ASYNC_TEST_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
+
+
+database.engine = _make_sync_engine(os.environ["DATABASE_URL"])
+database.async_engine = _make_async_engine()
 
 
 @pytest.fixture(autouse=True)
-def reset_db():
-    SQLModel.metadata.create_all(database.engine)
+async def reset_db():
+    async with database.async_engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all)
+        await conn.run_sync(SQLModel.metadata.create_all)
     yield
-    if IS_SQLITE:
-        SQLModel.metadata.drop_all(database.engine)
-    else:
-        with Session(database.engine) as session:
-            for job in session.exec(select(Job)).all():
-                session.delete(job)
-            session.commit()
 
 
 @pytest.fixture
-def session():
-    with Session(database.engine) as session:
+async def session():
+    async with AsyncSession(database.async_engine) as session:
         yield session
 
 
 @pytest.fixture
 def client(session):
-    def override_get_session():
+    async def override_get_session():
         yield session
 
     app.dependency_overrides[get_session] = override_get_session
