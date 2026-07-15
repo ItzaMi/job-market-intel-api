@@ -1,47 +1,13 @@
-import json
-from pathlib import Path
 import uuid
 from datetime import datetime
-
-from job_market_intel.utils.posting import apply_job_fields, get_job_by_fingerprint, make_fingerprint
 from sqlmodel import Session
 
+from job_market_intel.services.ingestion import ingest_jobs
+from job_market_intel.loaders import get_loader
 from job_market_intel.database import engine
-from job_market_intel.models import IngestionRun, IngestionStatus, Job, JobCreate
+from job_market_intel.models import IngestionRun, IngestionStatus
 from job_market_intel.worker import celery_app
 
-SAMPLE_JOBS_PATH = Path(__file__).resolve().parents[2] / "data" / "sample_jobs.json"
-
-def load_sample_jobs() -> list[JobCreate]:
-    with SAMPLE_JOBS_PATH.open() as json_data:
-        return [JobCreate.model_validate(job) for job in json.load(json_data)]
-
-def ingest_jobs(session: Session, jobs: list[JobCreate]) -> int:
-    created = 0
-    updated = 0
-    failed = 0
-    now = datetime.now()
-
-    for job in jobs:
-        try:
-            fingerprint = make_fingerprint(job.source, job.external_id, job.source_url)
-            existing = get_job_by_fingerprint(session, fingerprint)
-
-            if existing:
-                apply_job_fields(existing, job)
-                existing.updated_at = now
-                session.add(existing)
-                updated += 1
-            else:
-                db_job = Job(**job.model_dump(), created_at=now, updated_at=now, fingerprint=fingerprint)
-                session.add(db_job)
-                created += 1
-
-        except Exception:
-            failed += 1
-
-    session.commit()
-    return created, updated, failed
 
 @celery_app.task(name="ingest_jobs")
 def ingest_jobs_task(ingestion_run_id: str | uuid.UUID) -> None:
@@ -58,7 +24,8 @@ def ingest_jobs_task(ingestion_run_id: str | uuid.UUID) -> None:
         session.commit()
 
         try:
-            jobs = load_sample_jobs()
+            loader = get_loader(run.source)
+            jobs = loader()
             created, updated, failed = ingest_jobs(session, jobs)
             run.jobs_found = len(jobs)
             run.jobs_created = created

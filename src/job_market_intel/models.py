@@ -9,8 +9,11 @@ from enum import Enum
 TextField = Annotated[str, Field(min_length=1, max_length=120)]
 FilterText = Annotated[str, Field(min_length=1, max_length=120)]
 
+class JobSource(str, Enum):
+    sample_json = "sample_json"
+    arbeitnow = "arbeitnow"
 class JobPostingIdentity(SQLModel):
-    source: str
+    source: JobSource
     external_id: str | None
     source_url: str | None
 
@@ -76,7 +79,7 @@ class IngestionStatus(str, Enum):
 class IngestionRun(SQLModel, table=True):
     __tablename__ = "ingestion_run"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    source: str
+    source: JobSource
     status: IngestionStatus = Field(default=IngestionStatus.pending)
     jobs_found: int = 0
     jobs_created: int = 0
