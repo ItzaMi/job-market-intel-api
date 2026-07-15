@@ -6,7 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from datetime import datetime
 
 from job_market_intel.repositories import jobs as jobs_repo
-from job_market_intel.models import Job, JobCreate, JobFilters, JobUpdate, SalaryRange, SortBy
+from job_market_intel.models import Job, JobCreate, JobFilters, JobUpdate, SortBy
 
 class JobAlreadyExists(Exception):
     pass
@@ -14,20 +14,11 @@ class JobAlreadyExists(Exception):
 class JobNotFound(Exception):
     pass
 
-SALARY_RANGES = {
-    SalaryRange.under_40k: (None, 39999),
-    SalaryRange.range_40k_60k: (40000, 60000),
-    SalaryRange.range_60k_80k: (60000, 80000),
-    SalaryRange.range_80k_plus: (80000, None),
-}
-
 SORT_ORDERS = {
     SortBy.created_at_asc: Job.created_at.asc(),
     SortBy.created_at_desc: Job.created_at.desc(),
     SortBy.updated_at_asc: Job.updated_at.asc(),
     SortBy.updated_at_desc: Job.updated_at.desc(),
-    SortBy.salary_asc: Job.salary.asc(),
-    SortBy.salary_desc: Job.salary.desc(),
 }
 
 async def list(session: AsyncSession, filters: JobFilters) -> list[Job]:
@@ -41,14 +32,6 @@ async def list(session: AsyncSession, filters: JobFilters) -> list[Job]:
 
     if filters.location:
         statement = statement.where(Job.location.ilike(f"%{filters.location}%"))
-
-    if filters.salary_range:
-        min_salary, max_salary = SALARY_RANGES[filters.salary_range]
-
-        if min_salary is not None:
-            statement = statement.where(Job.salary >= min_salary)
-        if max_salary is not None:
-            statement = statement.where(Job.salary <= max_salary)
 
     if filters.sort:
         statement = statement.order_by(SORT_ORDERS[filters.sort])

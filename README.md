@@ -119,7 +119,7 @@ Things to tackle later. Items marked done are implemented; the rest came from co
 |---|-------|--------|---------------|
 | 1 | **Async SQLAlchemy** | Done | API uses `AsyncSession` + `asyncpg`; Celery stays sync with `psycopg` |
 | 2 | **Layered jobs CRUD** | Done | Router → service → repository for `/jobs/` endpoints |
-| 3 | **Database indexes** | Todo | Add indexes on columns we filter/sort (`salary`, `created_at`, `title`, …) |
+| 3 | **Database indexes** | Todo | Add indexes on columns we filter/sort ( `created_at`, `title`, …) |
 | 4 | **Full-text search** | Todo | PostgreSQL `tsvector` / `pg_trgm`, or semantic search with embeddings |
 | 5 | **Production Docker** | Todo | Multi-stage builds, smaller images, Gunicorn + Uvicorn workers |
 | 6 | **Celery depth** | Todo | Multiple queues, retries, Flower dashboard |
@@ -135,11 +135,10 @@ An **index** is a separate sorted lookup structure — like the index at the bac
 
 | Query pattern | Index type | Example |
 |---------------|------------|---------|
-| Exact match / sort | B-tree (default) | `WHERE salary >= 80000 ORDER BY created_at DESC` |
 | Partial text (`%engineer%`) | `pg_trgm` GIN | `WHERE title ILIKE '%engineer%'` |
 | Full-text search | `tsvector` GIN | `WHERE search_vector @@ plainto_tsquery('python remote')` |
 
-We already have a unique index on `fingerprint`. Filters on `title`, `company`, `location`, and sorts on `salary` / timestamps do not have indexes yet — that is roadmap item **#3**.
+We already have a unique index on `fingerprint`. Filters on `title`, `company`, `location`, and sorts on timestamps do not have indexes yet — that is roadmap item **#3**.
 
 ## Docker, Postgres & Alembic
 
@@ -385,7 +384,6 @@ docker compose run --rm api uv run pytest
 | `source_url`       | string | no*      | Canonical URL of the posting               |
 | `title`            | string | yes      |                                            |
 | `description`      | string | no       |                                            |
-| `salary`           | int    | yes      | Annual salary in USD                       |
 | `location`         | string | yes      |                                            |
 | `company`          | string | yes      |                                            |
 | `company_location` | string | yes      |                                            |
@@ -405,19 +403,9 @@ All filters are optional and can be combined.
 | `title`        | string | Case-insensitive partial match on job title      |
 | `company`      | string | Case-insensitive partial match on company name   |
 | `location`     | string | Case-insensitive partial match on job location   |
-| `salary_range` | enum   | One of: `under_40k`, `40k_60k`, `60k_80k`, `80k_plus` |
-| `sort`         | enum   | One of: `created_at_asc`, `created_at_desc`, `updated_at_asc`, `updated_at_desc`, `salary_asc`, `salary_desc` (default: `created_at_desc`) |
+| `sort`         | enum   | One of: `created_at_asc`, `created_at_desc`, `updated_at_asc`, `updated_at_desc` (default: `created_at_desc`) |
 | `limit`        | int    | Max results to return (default: `10`, max: `100`)    |
 | `offset`       | int    | Number of results to skip (default: `0`)               |
-
-Salary range values:
-
-| Value       | Range              |
-|-------------|--------------------|
-| `under_40k` | below $40,000      |
-| `40k_60k`   | $40,000 – $60,000  |
-| `60k_80k`   | $60,000 – $80,000  |
-| `80k_plus`  | $80,000 and above  |
 
 ## curl examples
 
@@ -436,7 +424,7 @@ curl http://127.0.0.1:8000/jobs/
 ### List jobs with filters
 
 ```bash
-curl "http://127.0.0.1:8000/jobs/?title=engineer&location=remote&salary_range=80k_plus&limit=5"
+curl "http://127.0.0.1:8000/jobs/?title=engineer&location=remote&limit=5"
 ```
 
 ### Create a job
@@ -450,7 +438,6 @@ curl -X POST http://127.0.0.1:8000/jobs/ \
     "source_url": "https://jobs.example.com/sample_json/acme-senior-backend-001",
     "title": "Senior Backend Engineer",
     "description": "Build and scale our API platform",
-    "salary": 120000,
     "location": "Remote",
     "company": "Acme Corp",
     "company_location": "San Francisco, CA"
@@ -514,7 +501,6 @@ curl -s -X POST http://127.0.0.1:8000/jobs/ \
     "external_id": "startup-frontend-001",
     "source_url": "https://jobs.example.com/sample_json/startup-frontend-001",
     "title": "Frontend Developer",
-    "salary": 95000,
     "location": "Lisbon",
     "company": "StartupXYZ",
     "company_location": "Lisbon, Portugal"
@@ -526,8 +512,8 @@ curl -s -X POST http://127.0.0.1:8000/ingestion-runs/
 # 4. List all jobs
 curl http://127.0.0.1:8000/jobs/
 
-# 5. Filter by company and salary band
-curl "http://127.0.0.1:8000/jobs/?company=startup&salary_range=80k_plus"
+# 5. Filter by company
+curl "http://127.0.0.1:8000/jobs/?company=startup"
 
 # 6. Get one job (use the id from step 2)
 curl http://127.0.0.1:8000/jobs/YOUR_JOB_ID_HERE/

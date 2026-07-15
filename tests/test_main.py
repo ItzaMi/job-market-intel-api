@@ -7,7 +7,6 @@ JOB_PAYLOAD = {
     "source_url": "https://jobs.example.com/sample_json/acme-senior-backend-001",
     "title": "Senior Backend Engineer",
     "description": "Build and scale our API platform",
-    "salary": 100000,
     "location": "Remote",
     "company": "Acme Corp",
     "company_location": "San Francisco, CA",
@@ -64,7 +63,7 @@ def test_create_job_missing_required_field(client: TestClient):
 
 
 def test_create_job_invalid_payload(client: TestClient):
-    payload = {**JOB_PAYLOAD, "salary": "invalid"}
+    payload = {**JOB_PAYLOAD, "title": None}
     response = client.post("/jobs/", json=payload)
     assert response.status_code == 422
 
@@ -135,35 +134,6 @@ def test_filter_by_location(client: TestClient):
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["location"] == "Remote"
-
-
-@pytest.mark.parametrize(
-    ("salary", "salary_range", "decoy_salary", "expected_count"),
-    [
-        (35000, "under_40k", 100000, 1),
-        (50000, "40k_60k", 100000, 1),
-        (70000, "60k_80k", 100000, 1),
-        (90000, "80k_plus", 50000, 1),
-    ],
-)
-def test_filter_by_salary_range(
-    client: TestClient,
-    salary: int,
-    salary_range: str,
-    decoy_salary: int,
-    expected_count: int,
-):
-    client.post("/jobs/", json={**JOB_PAYLOAD, "salary": salary})
-    client.post(
-        "/jobs/",
-        json={**JOB_PAYLOAD, "title": "Other Job", "salary": decoy_salary},
-    )
-
-    response = client.get("/jobs/", params={"salary_range": salary_range})
-    assert response.status_code == 200
-    assert len(response.json()) == expected_count
-    assert response.json()[0]["salary"] == salary
-
 
 def test_pagination(client: TestClient):
     for index in range(3):

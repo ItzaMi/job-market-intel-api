@@ -19,7 +19,7 @@ async def get_job_by_fingerprint_async(session: AsyncSession, fingerprint: str) 
     return result.first()
 
 # Fields that can change when the same posting is re-ingested
-MUTABLE_JOB_FIELDS = ("title", "description", "salary", "location", "company", "company_location", "source_url")
+MUTABLE_JOB_FIELDS = ("title", "description", "location", "company", "company_location", "source_url")
 
 def apply_job_fields(target: Job, incoming: JobCreate) -> None:
     data = incoming.model_dump()
