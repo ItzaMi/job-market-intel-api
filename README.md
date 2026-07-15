@@ -1,568 +1,111 @@
 # Job Market Intel API
 
-A FastAPI service for collecting, ingesting, and querying job listings. Data is persisted in PostgreSQL via SQLModel, background ingestion runs through Celery + Redis, and schema changes are managed by Alembic.
+FastAPI API for ingesting and querying job listings. Postgres + SQLModel, background ingestion via Celery + Redis, migrations via Alembic.
 
-## Stack
+**Stack:** FastAPI (async) · SQLModel · PostgreSQL 17 · asyncpg / psycopg · Celery · Redis · uv
 
-- **FastAPI** — HTTP API (async routes)
-- **SQLModel** — ORM and request/response models
-- **PostgreSQL 17** — database (via Docker)
-- **asyncpg** — async Postgres driver for the API layer
-- **Alembic** — migrations
-- **Celery** — background job ingestion
-- **Redis** — Celery broker and result backend
-- **uv** — dependency and project management
-
-## Prerequisites
-
-- [uv](https://docs.astral.sh/uv/)
-- [Docker](https://www.docker.com/) and Docker Compose
-- Python 3.13+
-
-## Quick start (Docker)
-
-Start the API, worker, Redis, and Postgres together:
-
-```bash
-docker compose up --build
-```
-
-Run in the background:
+## Run
 
 ```bash
 docker compose up -d --build
-```
-
-Apply database migrations (first run, or after pulling new migrations):
-
-```bash
 docker compose run --rm api uv run alembic upgrade head
 ```
 
-The API is available at `http://127.0.0.1:8000`.
+- API: http://127.0.0.1:8000  
+- Docs: http://127.0.0.1:8000/docs  
+- Postgres: `localhost:5432` / `job_market_intel` / `postgres` / `postgres`
 
-Interactive docs:
-
-- Swagger UI: http://127.0.0.1:8000/docs
-- ReDoc: http://127.0.0.1:8000/redoc
-
-Postgres is exposed on `localhost:5432` with:
-
-| Setting  | Value              |
-|----------|--------------------|
-| Database | `job_market_intel` |
-| User     | `postgres`         |
-| Password | `postgres`         |
+```bash
+uv run pytest                  # tests (async SQLite)
+docker compose logs -f         # follow logs
+docker compose down -v         # wipe DB volume and stop
+```
 
 ## Architecture
 
-The codebase uses a layered structure: routers handle HTTP, services hold business rules, repositories talk to the database.
-
-### Jobs API (CRUD)
-
 ```
-HTTP request
-    ↓
-routers/jobs.py        ← parse input, map errors to status codes (404, 400, …)
-    ↓
-services/jobs.py       ← filters, fingerprint dedup, timestamps, domain exceptions
-    ↓
-repositories/jobs.py   ← AsyncSession queries (get, list, create, update, delete)
-    ↓
-PostgreSQL             ← via asyncpg (API layer)
+routers/  →  services/  →  repositories/  →  Postgres (asyncpg)
+                              ↑
+Celery worker → services/ingestion.py (sync psycopg)
 ```
 
-| Layer | Responsibility | Example |
-|-------|----------------|---------|
-| **Router** | HTTP only | `HTTPException(404)` when service raises `JobNotFound` |
-| **Service** | Business rules | Build fingerprint, reject duplicates, apply filters |
-| **Repository** | DB access | `await session.get(...)`, `await session.commit()` |
+- **Routers** — HTTP and status codes  
+- **Services** — business rules (fingerprints, filters, domain errors)  
+- **Repositories** — DB access  
 
-Domain exceptions (`JobNotFound`, `JobAlreadyExists`) live in the service. Routers catch them and translate to HTTP responses.
+Jobs are deduped by a **fingerprint** (`source.value` + `external_id` or `source_url`). API DB access is async; the Celery worker stays sync.
 
-### Background ingestion
+## API
 
-```
-POST /ingestion-runs/
-    ↓
-routers/ingestion_runs.py      ← HTTP (start/get run)
-    ↓
-services/ingestion_runs.py     ← create run row, enqueue Celery task
-    ↓
-Celery task (tasks.py)         ← queued in Redis, picked up by worker
-    ↓
-loader for that source
-    ↓
-services/ingestion.py          ← upsert jobs by fingerprint (sync)
-    ↓
-PostgreSQL                     ← via psycopg (Celery worker)
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health/` | Health check |
+| `GET` | `/jobs/` | List / filter / sort / paginate |
+| `POST` | `/jobs/` | Create |
+| `GET` | `/jobs/{id}/` | Get one |
+| `PATCH` | `/jobs/{id}/` | Update |
+| `DELETE` | `/jobs/{id}/` | Delete |
+| `POST` | `/ingestion-runs/` | Start background ingest (`?source=sample_json`) |
+| `GET` | `/ingestion-runs/{id}/` | Ingest run status |
 
-### Async vs sync database access
-
-The API and Celery worker share `DATABASE_URL` but use different engines in `database.py`:
-
-| Consumer | Engine | Driver | Session |
-|----------|--------|--------|---------|
-| FastAPI routes | `async_engine` | `asyncpg` | `AsyncSession` |
-| Celery worker | `engine` | `psycopg` | `Session` |
-
-`DATABASE_URL` stays `postgresql+psycopg://…` in Docker and Alembic. The API converts it to `postgresql+asyncpg://…` at runtime. Celery and migrations keep the sync URL.
-
-### Job identity & deduplication
-
-Each job comes from a **source** (`sample_json`, `arbeitnow`, …) and is identified by `external_id` or `source_url`. The API builds a **fingerprint** from those fields and stores it as a unique column. Re-ingesting the same posting updates the existing row instead of creating a duplicate.
-
-## Roadmap
-
-Things to tackle later. Items marked done are implemented; the rest came from code review / production-readiness feedback.
-
-| # | Topic | Status | What it means |
-|---|-------|--------|---------------|
-| 1 | **Async SQLAlchemy** | Done | API uses `AsyncSession` + `asyncpg`; Celery stays sync with `psycopg` |
-| 2 | **Layered jobs CRUD** | Done | Router → service → repository for `/jobs/` endpoints |
-| 3 | **Ingestion runs layering** | Done | Router → service → repository for `/ingestion-runs/`; Celery bulk upsert stays in `services/ingestion.py` |
-| 4 | **Database indexes** | Partial | B-tree index on `created_at` (default sort). Salary column removed — upstream data was not useful |
-| 5 | **Production Docker** | Todo | Multi-stage builds, smaller images, Gunicorn + Uvicorn workers (`fastapi dev` is local-only today) |
-| 6 | **Full-text search** | Todo | PostgreSQL `tsvector` / `pg_trgm`, or semantic search with embeddings |
-| 7 | **Celery depth** | Todo | Multiple queues, retries, Flower dashboard |
-| 8 | **Integration tests** | Todo | Testcontainers for real Postgres + Redis in CI |
-| 9 | **Load balancing** | Todo | Multiple API replicas behind a reverse proxy |
-
-### Database indexes — quick primer
-
-Think of a table like a spreadsheet. Without an index, Postgres reads **every row** to find matches (a *sequential scan*). With 20 rows that is instant; with 100,000 rows it is slow.
-
-An **index** is a separate sorted lookup structure — like the index at the back of a book. It lets Postgres jump straight to matching rows.
-
-| Query pattern | Index type | Example |
-|---------------|------------|---------|
-| Exact match / sort | B-tree (default) | `ORDER BY created_at DESC` |
-| Partial text (`%engineer%`) | `pg_trgm` GIN | `WHERE title ILIKE '%engineer%'` |
-| Full-text search | `tsvector` GIN | `WHERE search_vector @@ plainto_tsquery('python remote')` |
-
-We already have a unique index on `fingerprint` and a B-tree index on `created_at`. Text search filters (`title`, `company`, `location`) would need `pg_trgm` later — that is roadmap item **#6**.
-
-## Docker, Postgres & Alembic
-
-This project splits responsibilities across two concerns:
-
-| Layer | Tool | Role |
-|-------|------|------|
-| **Data** | PostgreSQL (`db` service) | Stores job records permanently |
-| **Schema** | Alembic (`migrations/`) | Version-controls and applies table changes |
-
-The API reads/writes data through SQLModel, but it does **not** create or alter tables on startup. Schema changes are applied separately with Alembic.
-
-### How the services connect
-
-- **`api`** — runs FastAPI. Code is bind-mounted from the project folder (`.:/app`), so Python file edits are picked up by the dev server without rebuilding the image.
-- **`worker`** — runs a Celery worker that processes ingestion tasks from Redis.
-- **`redis`** — message broker and result store for Celery.
-- **`db`** — runs Postgres 17. Data lives in the named volume `postgres_data`, so it survives `docker compose down` and container restarts.
-- **Alembic** — runs as a one-off command inside the `api` container (or locally with `uv`). It connects to the same Postgres instance and applies SQL from `migrations/versions/`.
-
-Migration files are committed to git. After pulling new migrations from a teammate, run `upgrade head` — you do not rebuild the image for that.
-
-### Database URLs
-
-Both the API and Alembic read `DATABASE_URL` from the environment (`database.py` and `migrations/env.py`). The **host** in the URL depends on where the command runs:
-
-| Where you run the command | Host in URL | Example |
-|---------------------------|-------------|---------|
-| Inside the `api` container | `db` (Docker service name) | `postgresql+psycopg://postgres:postgres@db:5432/job_market_intel` |
-| On host machine (`uv run …`) | `localhost` | `postgresql+psycopg://postgres:postgres@localhost:5432/job_market_intel` |
-
-`docker-compose.yml` sets the in-container URL for the `api` service automatically. Only `export DATABASE_URL=…` is needed when running Alembic or the API locally against the Docker Postgres.
-
-The API converts this URL to `postgresql+asyncpg://…` internally. Alembic and the Celery worker use the sync `psycopg` URL as-is.
-
-Format breakdown:
-
-```
-postgresql+psycopg://USER:PASSWORD@HOST:PORT/DATABASE
-                       │        │     │        └── job_market_intel
-                       │        │     └── 5432
-                       │        └── db (in compose) or localhost (from host)
-                       └── postgres:postgres
-```
-
-### First-time setup
+Details and schemas: **[/docs](http://127.0.0.1:8000/docs)**.
 
 ```bash
-# 1. Build and start both services
-docker compose up -d --build
-
-# 2. Apply all migrations (creates the job table)
-docker compose run --rm api uv run alembic upgrade head
-
-# 3. Verify
-curl http://127.0.0.1:8000/health/
-docker compose exec db psql -U postgres -d job_market_intel -c "\dt"
-```
-
-Step 2 is required on a fresh database. Without it, the API will start but requests that hit the DB will fail because the tables do not exist yet.
-
-### Day-to-day flow (changing the schema)
-
-When editing `models.py`:
-
-```bash
-# 1. Generate a migration (review the file before committing)
-docker compose run --rm api uv run alembic revision --autogenerate -m "add company size"
-
-# 2. Apply it to your local database
-docker compose run --rm api uv run alembic upgrade head
-
-# 3. Restart is usually not needed — the API picks up model changes via the bind mount
-#    Test at http://127.0.0.1:8000/docs
-```
-
-For generating migrations on the host:
-
-```bash
-export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/job_market_intel
-uv run alembic revision --autogenerate -m "add company size"
-uv run alembic upgrade head
-```
-
-Commit both `models.py` and the new file under `migrations/versions/`.
-
-### When to rebuild the API image
-
-Because the project directory is bind-mounted into the container, most changes do **not** require a rebuild:
-
-| Change | Rebuild? | What to do |
-|--------|----------|------------|
-| Python files (`main.py`, `models.py`, …) | No | Save the file; FastAPI dev server reloads |
-| New migration in `migrations/versions/` | No | Run `alembic upgrade head` |
-| `pyproject.toml` / `uv.lock` (new dependency) | **Yes** | `docker compose up -d --build` |
-| `DOCKERFILE` changes | **Yes** | `docker compose up -d --build` |
-| `docker-compose.yml` env / ports | No* | `docker compose up -d` (recreates containers) |
-
-\*Rebuild only if you also changed build-related settings; otherwise recreating the container is enough.
-
-### Resetting the database
-
-```bash
-# Stop containers and delete all persisted data (fresh empty Postgres)
-docker compose down -v
-
-# Start again and re-apply migrations from scratch
-docker compose up -d --build
-docker compose run --rm api uv run alembic upgrade head
-```
-
-### Useful Alembic commands
-
-Run inside Docker (recommended — uses the correct `DATABASE_URL` automatically):
-
-```bash
-# Apply all pending migrations
-docker compose run --rm api uv run alembic upgrade head
-
-# Roll back the last migration
-docker compose run --rm api uv run alembic downgrade -1
-
-# Show current revision
-docker compose run --rm api uv run alembic current
-
-# Show migration history
-docker compose run --rm api uv run alembic history
-
-# Generate a new migration after editing models.py
-docker compose run --rm api uv run alembic revision --autogenerate -m "your message"
-```
-
-Same commands work locally if `DATABASE_URL` points at `localhost:5432` (see [Database URLs](#database-urls) above).
-
-## Local development (without Docker for the API)
-
-Install dependencies:
-
-```bash
-uv sync
-```
-
-Start Postgres only:
-
-```bash
-docker compose up -d db
-```
-
-Set the database URL and run migrations:
-
-```bash
-export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/job_market_intel
-uv run alembic upgrade head
-```
-
-Run the API:
-
-```bash
-export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/job_market_intel
-uv run fastapi dev src/job_market_intel/main.py
-```
-
-## Docker commands
-
-Stop containers:
-
-```bash
-docker compose down
-```
-
-Stop and delete DB data:
-
-```bash
-docker compose down -v
-```
-
-See running containers:
-
-```bash
-docker compose ps
-```
-
-Follow logs:
-
-```bash
-docker compose logs -f
-```
-
-Open a Postgres shell:
-
-```bash
-docker compose exec db psql -U postgres -d job_market_intel
-```
-
-Inside `psql`:
-
-```sql
-\dt
-SELECT * FROM job;
-```
-
-Exit with `\q`.
-
-## Run tests
-
-Tests use an in-memory async SQLite database (`sqlite+aiosqlite://`) so they run quickly without Docker:
-
-```bash
-uv run pytest
-```
-
-Verbose output:
-
-```bash
-uv run pytest -v
-```
-
-To run tests against the Docker Postgres instance (same DB the API uses):
-
-```bash
-docker compose run --rm api uv run pytest
-```
-
-## API endpoints
-
-| Method   | Path                        | Description                              |
-|----------|-----------------------------|------------------------------------------|
-| `GET`    | `/health/`                  | Health check                             |
-| `GET`    | `/jobs/`                    | List jobs (supports filters below)       |
-| `POST`   | `/jobs/`                    | Create a job                             |
-| `GET`    | `/jobs/{job_id}/`           | Get a job by ID                          |
-| `PATCH`  | `/jobs/{job_id}/`           | Update a job (partial)                   |
-| `DELETE` | `/jobs/{job_id}/`           | Delete a job by ID                       |
-| `POST`   | `/ingestion-runs/`          | Start a background ingestion run         |
-| `GET`    | `/ingestion-runs/{run_id}/` | Get ingestion run status and counters    |
-
-### Job fields
-
-| Field              | Type   | Required | Notes                                      |
-|--------------------|--------|----------|--------------------------------------------|
-| `source`           | enum   | yes      | `sample_json` or `arbeitnow`               |
-| `external_id`      | string | no*      | ID from the upstream job board             |
-| `source_url`       | string | no*      | Canonical URL of the posting               |
-| `title`            | string | yes      |                                            |
-| `description`      | string | no       |                                            |
-| `location`         | string | yes      |                                            |
-| `company`          | string | yes      |                                            |
-| `company_location` | string | yes      |                                            |
-| `id`               | UUID   | —        | Set by the API                             |
-| `fingerprint`      | string | —        | Set by the API (`source:external_id`)      |
-| `created_at`       | datetime | —      | Set by the API                             |
-| `updated_at`       | datetime | —      | Set by the API                             |
-
-\* At least one of `external_id` or `source_url` is required so the API can deduplicate postings.
-
-### List filters (`GET /jobs/`)
-
-All filters are optional and can be combined.
-
-| Query param    | Type   | Description                                      |
-|----------------|--------|--------------------------------------------------|
-| `title`        | string | Case-insensitive partial match on job title      |
-| `company`      | string | Case-insensitive partial match on company name   |
-| `location`     | string | Case-insensitive partial match on job location   |
-| `sort`         | enum   | One of: `created_at_asc`, `created_at_desc`, `updated_at_asc`, `updated_at_desc` (default: `created_at_desc`) |
-| `limit`        | int    | Max results to return (default: `10`, max: `100`)    |
-| `offset`       | int    | Number of results to skip (default: `0`)               |
-
-## curl examples
-
-### Health check
-
-```bash
-curl http://127.0.0.1:8000/health/
-```
-
-### List jobs
-
-```bash
-curl http://127.0.0.1:8000/jobs/
-```
-
-### List jobs with filters
-
-```bash
-curl "http://127.0.0.1:8000/jobs/?title=engineer&location=remote&limit=5"
-```
-
-### Create a job
-
-```bash
-curl -X POST http://127.0.0.1:8000/jobs/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "sample_json",
-    "external_id": "acme-senior-backend-001",
-    "source_url": "https://jobs.example.com/sample_json/acme-senior-backend-001",
-    "title": "Senior Backend Engineer",
-    "description": "Build and scale our API platform",
-    "location": "Remote",
-    "company": "Acme Corp",
-    "company_location": "San Francisco, CA"
-  }'
-```
-
-`description` is optional. Save the `id` from the response for the next request.
-
-### Get a job by ID
-
-Replace `{job_id}` with the UUID returned from the create response:
-
-```bash
-curl http://127.0.0.1:8000/jobs/{job_id}/
-```
-
-Example:
-
-```bash
-curl http://127.0.0.1:8000/jobs/550e8400-e29b-41d4-a716-446655440000/
-```
-
-### Delete a job by ID
-
-```bash
-curl -X DELETE http://127.0.0.1:8000/jobs/{job_id}/
-```
-
-### Start an ingestion run
-
-Loads jobs from a data source in the background (requires the `worker` service running):
-
-```bash
-# Default source: sample_json (reads data/sample_jobs.json)
-curl -X POST http://127.0.0.1:8000/ingestion-runs/
-
-# Pick a source explicitly
+# Ingest sample jobs
 curl -X POST "http://127.0.0.1:8000/ingestion-runs/?source=sample_json"
+
+# List
+curl "http://127.0.0.1:8000/jobs/?title=engineer&limit=5"
 ```
 
-Response includes a `run_id`. Poll status with:
+## Migrations
 
 ```bash
-curl http://127.0.0.1:8000/ingestion-runs/{run_id}/
-```
-
-An ingestion run tracks: `status` (`pending` → `in_progress` → `completed` / `failed`), `jobs_found`, `jobs_created`, `jobs_updated`, `jobs_failed`, and `error` if something went wrong.
-
-## Example workflow
-
-```bash
-# 1. Start services and migrate
-docker compose up -d --build
+# Apply
 docker compose run --rm api uv run alembic upgrade head
 
-# 2. Create a job
-curl -s -X POST http://127.0.0.1:8000/jobs/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "sample_json",
-    "external_id": "startup-frontend-001",
-    "source_url": "https://jobs.example.com/sample_json/startup-frontend-001",
-    "title": "Frontend Developer",
-    "location": "Lisbon",
-    "company": "StartupXYZ",
-    "company_location": "Lisbon, Portugal"
-  }'
-
-# 3. Or ingest many jobs at once from sample_json
-curl -s -X POST http://127.0.0.1:8000/ingestion-runs/
-
-# 4. List all jobs
-curl http://127.0.0.1:8000/jobs/
-
-# 5. Filter by company
-curl "http://127.0.0.1:8000/jobs/?company=startup"
-
-# 6. Get one job (use the id from step 2)
-curl http://127.0.0.1:8000/jobs/YOUR_JOB_ID_HERE/
+# After model changes — review the generated file before applying
+docker compose run --rm api uv run alembic revision --autogenerate -m "your message"
+docker compose run --rm api uv run alembic upgrade head
 ```
 
-## Project layout
+Autogenerate often includes extra diffs — keep only what you intend.
+
+## Layout
 
 ```
-├── src/job_market_intel/
-│   ├── main.py              # FastAPI app entry point
-│   ├── database.py          # Sync + async engines, get_session dependency
-│   ├── models.py            # SQLModel schemas and filter models
-│   ├── tasks.py             # Celery tasks (ingestion orchestration)
-│   ├── worker.py            # Celery app configuration
-│   ├── routers/
-│   │   ├── jobs.py          # Jobs HTTP endpoints (thin — delegates to service)
-│   │   └── ingestion_runs.py
-│   ├── services/
-│   │   ├── jobs.py            # Jobs business rules + domain exceptions
-│   │   ├── ingestion_runs.py  # Start/get ingestion runs (API path)
-│   │   └── ingestion.py       # Bulk upsert logic (Celery path)
-│   ├── repositories/
-│   │   ├── jobs.py          # Jobs DB access (AsyncSession)
-│   │   └── ingestion_runs.py
-│   ├── loaders/
-│   │   ├── sample_json.py   # Loads data/sample_jobs.json
-│   │   └── arbeitnow.py     # Arbeitnow API loader (stub)
-│   └── utils/
-│       └── posting.py       # Fingerprint + dedup helpers
-├── data/
-│   └── sample_jobs.json     # Sample data for ingestion
-├── docker-compose.yml       # API + worker + Redis + Postgres
-├── Dockerfile
-├── alembic.ini
-├── migrations/              # Alembic migration scripts
-└── tests/
-    ├── conftest.py          # Async test DB setup and fixtures
-    └── test_main.py         # API tests
+src/job_market_intel/
+  routers/          # HTTP
+  services/         # jobs, ingestion_runs, ingestion (Celery)
+  repositories/     # DB
+  loaders/          # sample_json, arbeitnow (stub)
+  database.py       # sync + async engines
+  models.py
+  tasks.py / worker.py
+data/sample_jobs.json
+migrations/
+tests/
 ```
 
-## Environment variables
+## Env (Compose sets these for containers)
 
-| Variable                 | Description                         | Set by |
-|--------------------------|-------------------------------------|--------|
-| `DATABASE_URL`           | SQLAlchemy connection string        | `docker-compose.yml` for `api` and `worker`; export when running `uv` on the host |
-| `CELERY_BROKER_URL`      | Redis URL for Celery task queue     | `docker-compose.yml` |
-| `CELERY_RESULT_BACKEND`  | Redis URL for Celery task results   | `docker-compose.yml` |
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | `postgresql+psycopg://…` (API converts to asyncpg) |
+| `CELERY_BROKER_URL` | Redis broker |
+| `CELERY_RESULT_BACKEND` | Redis results |
 
-See [Database URLs](#database-urls) for the exact values to use inside Docker vs on your machine.
+On the host (API/Alembic against Docker Postgres): use `@localhost:5432` instead of `@db:5432`.
+
+## To-do
+
+- Arbeitnow loader
+- better search (`pg_trgm` / full-text).  
+
+## To study
+
+- Ops:
+  - production Docker
+  - Flower
+  - Testcontainers
+  - load balancing
