@@ -4,9 +4,10 @@ A FastAPI service for collecting, ingesting, and querying job listings. Data is 
 
 ## Stack
 
-- **FastAPI** — HTTP API
+- **FastAPI** — HTTP API (async routes)
 - **SQLModel** — ORM and request/response models
 - **PostgreSQL 17** — database (via Docker)
+- **asyncpg** — async Postgres driver for the API layer
 - **Alembic** — migrations
 - **Celery** — background job ingestion
 - **Redis** — Celery broker and result backend
@@ -55,33 +56,56 @@ Postgres is exposed on `localhost:5432` with:
 
 ## Architecture
 
-The codebase is split into layers so HTTP, business logic, and data sources stay separate:
+The codebase uses a layered structure: routers handle HTTP, services hold business rules, repositories talk to the database.
+
+### Jobs API (CRUD)
 
 ```
 HTTP request
     ↓
-routers/          ← validate input, call services, return responses
+routers/jobs.py        ← parse input, map errors to status codes (404, 400, …)
     ↓
-services/         ← business rules (e.g. deduplication, bulk ingest)
+services/jobs.py       ← filters, fingerprint dedup, timestamps, domain exceptions
     ↓
-loaders/          ← fetch + normalize data from external sources
+repositories/jobs.py   ← AsyncSession queries (get, list, create, update, delete)
     ↓
-PostgreSQL
+PostgreSQL             ← via asyncpg (API layer)
 ```
 
-Background ingestion follows a similar path:
+| Layer | Responsibility | Example |
+|-------|----------------|---------|
+| **Router** | HTTP only | `HTTPException(404)` when service raises `JobNotFound` |
+| **Service** | Business rules | Build fingerprint, reject duplicates, apply filters |
+| **Repository** | DB access | `await session.get(...)`, `await session.commit()` |
+
+Domain exceptions (`JobNotFound`, `JobAlreadyExists`) live in the service. Routers catch them and translate to HTTP responses.
+
+### Background ingestion
 
 ```
 POST /ingestion-runs/
+    ↓
+routers/ingestion_runs.py
     ↓
 Celery task (tasks.py)   ← queued in Redis, picked up by worker
     ↓
 loader for that source
     ↓
-services/ingestion.py    ← upsert jobs by fingerprint
+services/ingestion.py    ← upsert jobs by fingerprint (sync)
     ↓
-PostgreSQL
+PostgreSQL             ← via psycopg (Celery worker)
 ```
+
+### Async vs sync database access
+
+The API and Celery worker share `DATABASE_URL` but use different engines in `database.py`:
+
+| Consumer | Engine | Driver | Session |
+|----------|--------|--------|---------|
+| FastAPI routes | `async_engine` | `asyncpg` | `AsyncSession` |
+| Celery worker | `engine` | `psycopg` | `Session` |
+
+`DATABASE_URL` stays `postgresql+psycopg://…` in Docker and Alembic. The API converts it to `postgresql+asyncpg://…` at runtime. Celery and migrations keep the sync URL.
 
 ### Job identity & deduplication
 
@@ -89,18 +113,19 @@ Each job comes from a **source** (`sample_json`, `arbeitnow`, …) and is identi
 
 ## Roadmap
 
-Things to tackle later, roughly in priority order. Each item came from code review / production-readiness feedback.
+Things to tackle later. Items marked done are implemented; the rest came from code review / production-readiness feedback.
 
-| # | Topic | What it means | Why it matters |
-|---|-------|---------------|----------------|
-| 1 | **Fix async/sync mismatch** | Routes are `async def` but DB calls are sync — either switch routes to `def` or adopt `AsyncSession` + `asyncpg` | Sync DB inside async routes blocks the event loop under load |
-| 2 | **Database indexes** | Add indexes on columns we filter/sort (`salary`, `created_at`, `title`, …) | `ILIKE '%engineer%'` on 100k rows becomes a full table scan without indexes |
-| 3 | **Full-text search** | PostgreSQL `tsvector` / `pg_trgm`, or semantic search with embeddings | Better search than partial `ILIKE` matches |
-| 4 | **Production Docker** | Multi-stage builds, smaller images, Gunicorn + Uvicorn workers | `fastapi dev` is for development only |
-| 5 | **Celery depth** | Multiple queues, retries, Flower dashboard | Visibility and control over background jobs |
-| 6 | **Integration tests** | Testcontainers for real Postgres + Redis in CI | SQLite tests miss Postgres-specific behaviour |
-| 7 | **Clean Architecture** | Repository + service layers for jobs CRUD (like ingestion already has) | Thinner routers, easier testing, SOLID |
-| 8 | **Load balancing** | Multiple API replicas behind a reverse proxy | Horizontal scaling once async + indexes are in place |
+| # | Topic | Status | What it means |
+|---|-------|--------|---------------|
+| 1 | **Async SQLAlchemy** | Done | API uses `AsyncSession` + `asyncpg`; Celery stays sync with `psycopg` |
+| 2 | **Layered jobs CRUD** | Done | Router → service → repository for `/jobs/` endpoints |
+| 3 | **Database indexes** | Todo | Add indexes on columns we filter/sort (`salary`, `created_at`, `title`, …) |
+| 4 | **Full-text search** | Todo | PostgreSQL `tsvector` / `pg_trgm`, or semantic search with embeddings |
+| 5 | **Production Docker** | Todo | Multi-stage builds, smaller images, Gunicorn + Uvicorn workers |
+| 6 | **Celery depth** | Todo | Multiple queues, retries, Flower dashboard |
+| 7 | **Integration tests** | Todo | Testcontainers for real Postgres + Redis in CI |
+| 8 | **Ingestion runs layering** | Todo | Service layer for `ingestion_runs` (repo exists, service does not yet) |
+| 9 | **Load balancing** | Todo | Multiple API replicas behind a reverse proxy |
 
 ### Database indexes — quick primer
 
@@ -114,7 +139,7 @@ An **index** is a separate sorted lookup structure — like the index at the bac
 | Partial text (`%engineer%`) | `pg_trgm` GIN | `WHERE title ILIKE '%engineer%'` |
 | Full-text search | `tsvector` GIN | `WHERE search_vector @@ plainto_tsquery('python remote')` |
 
-We already have a unique index on `fingerprint`. Filters on `title`, `company`, `location`, and sorts on `salary` / timestamps do not have indexes yet — that is item **#2** on the roadmap.
+We already have a unique index on `fingerprint`. Filters on `title`, `company`, `location`, and sorts on `salary` / timestamps do not have indexes yet — that is roadmap item **#3**.
 
 ## Docker, Postgres & Alembic
 
@@ -147,6 +172,8 @@ Both the API and Alembic read `DATABASE_URL` from the environment (`database.py`
 | On host machine (`uv run …`) | `localhost` | `postgresql+psycopg://postgres:postgres@localhost:5432/job_market_intel` |
 
 `docker-compose.yml` sets the in-container URL for the `api` service automatically. Only `export DATABASE_URL=…` is needed when running Alembic or the API locally against the Docker Postgres.
+
+The API converts this URL to `postgresql+asyncpg://…` internally. Alembic and the Celery worker use the sync `psycopg` URL as-is.
 
 Format breakdown:
 
@@ -271,7 +298,8 @@ uv run alembic upgrade head
 Run the API:
 
 ```bash
-uv run fastapi dev main.py
+export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/job_market_intel
+uv run fastapi dev src/job_market_intel/main.py
 ```
 
 ## Docker commands
@@ -317,7 +345,7 @@ Exit with `\q`.
 
 ## Run tests
 
-Tests use an in-memory SQLite database by default, so they run quickly without Docker:
+Tests use an in-memory async SQLite database (`sqlite+aiosqlite://`) so they run quickly without Docker:
 
 ```bash
 uv run pytest
@@ -510,15 +538,19 @@ curl http://127.0.0.1:8000/jobs/YOUR_JOB_ID_HERE/
 ```
 ├── src/job_market_intel/
 │   ├── main.py              # FastAPI app entry point
-│   ├── database.py          # Engine and session dependency
+│   ├── database.py          # Sync + async engines, get_session dependency
 │   ├── models.py            # SQLModel schemas and filter models
 │   ├── tasks.py             # Celery tasks (ingestion orchestration)
 │   ├── worker.py            # Celery app configuration
 │   ├── routers/
-│   │   ├── jobs.py          # Jobs CRUD + list filters
+│   │   ├── jobs.py          # Jobs HTTP endpoints (thin — delegates to service)
 │   │   └── ingestion_runs.py
 │   ├── services/
-│   │   └── ingestion.py     # Bulk upsert logic
+│   │   ├── jobs.py          # Jobs business rules + domain exceptions
+│   │   └── ingestion.py     # Bulk upsert logic (Celery path)
+│   ├── repositories/
+│   │   ├── jobs.py          # Jobs DB access (AsyncSession)
+│   │   └── ingestion_runs.py
 │   ├── loaders/
 │   │   ├── sample_json.py   # Loads data/sample_jobs.json
 │   │   └── arbeitnow.py     # Arbeitnow API loader (stub)
@@ -531,7 +563,7 @@ curl http://127.0.0.1:8000/jobs/YOUR_JOB_ID_HERE/
 ├── alembic.ini
 ├── migrations/              # Alembic migration scripts
 └── tests/
-    ├── conftest.py          # Test DB setup and fixtures
+    ├── conftest.py          # Async test DB setup and fixtures
     └── test_main.py         # API tests
 ```
 
