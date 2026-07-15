@@ -85,15 +85,17 @@ Domain exceptions (`JobNotFound`, `JobAlreadyExists`) live in the service. Route
 ```
 POST /ingestion-runs/
     ↓
-routers/ingestion_runs.py
+routers/ingestion_runs.py      ← HTTP (start/get run)
     ↓
-Celery task (tasks.py)   ← queued in Redis, picked up by worker
+services/ingestion_runs.py     ← create run row, enqueue Celery task
+    ↓
+Celery task (tasks.py)         ← queued in Redis, picked up by worker
     ↓
 loader for that source
     ↓
-services/ingestion.py    ← upsert jobs by fingerprint (sync)
+services/ingestion.py          ← upsert jobs by fingerprint (sync)
     ↓
-PostgreSQL             ← via psycopg (Celery worker)
+PostgreSQL                     ← via psycopg (Celery worker)
 ```
 
 ### Async vs sync database access
@@ -119,12 +121,12 @@ Things to tackle later. Items marked done are implemented; the rest came from co
 |---|-------|--------|---------------|
 | 1 | **Async SQLAlchemy** | Done | API uses `AsyncSession` + `asyncpg`; Celery stays sync with `psycopg` |
 | 2 | **Layered jobs CRUD** | Done | Router → service → repository for `/jobs/` endpoints |
-| 3 | **Database indexes** | Todo | Add indexes on columns we filter/sort ( `created_at`, `title`, …) |
-| 4 | **Full-text search** | Todo | PostgreSQL `tsvector` / `pg_trgm`, or semantic search with embeddings |
-| 5 | **Production Docker** | Todo | Multi-stage builds, smaller images, Gunicorn + Uvicorn workers |
-| 6 | **Celery depth** | Todo | Multiple queues, retries, Flower dashboard |
-| 7 | **Integration tests** | Todo | Testcontainers for real Postgres + Redis in CI |
-| 8 | **Ingestion runs layering** | Todo | Service layer for `ingestion_runs` (repo exists, service does not yet) |
+| 3 | **Ingestion runs layering** | Done | Router → service → repository for `/ingestion-runs/`; Celery bulk upsert stays in `services/ingestion.py` |
+| 4 | **Database indexes** | Partial | B-tree index on `created_at` (default sort). Salary column removed — upstream data was not useful |
+| 5 | **Production Docker** | Todo | Multi-stage builds, smaller images, Gunicorn + Uvicorn workers (`fastapi dev` is local-only today) |
+| 6 | **Full-text search** | Todo | PostgreSQL `tsvector` / `pg_trgm`, or semantic search with embeddings |
+| 7 | **Celery depth** | Todo | Multiple queues, retries, Flower dashboard |
+| 8 | **Integration tests** | Todo | Testcontainers for real Postgres + Redis in CI |
 | 9 | **Load balancing** | Todo | Multiple API replicas behind a reverse proxy |
 
 ### Database indexes — quick primer
@@ -135,10 +137,11 @@ An **index** is a separate sorted lookup structure — like the index at the bac
 
 | Query pattern | Index type | Example |
 |---------------|------------|---------|
+| Exact match / sort | B-tree (default) | `ORDER BY created_at DESC` |
 | Partial text (`%engineer%`) | `pg_trgm` GIN | `WHERE title ILIKE '%engineer%'` |
 | Full-text search | `tsvector` GIN | `WHERE search_vector @@ plainto_tsquery('python remote')` |
 
-We already have a unique index on `fingerprint`. Filters on `title`, `company`, `location`, and sorts on timestamps do not have indexes yet — that is roadmap item **#3**.
+We already have a unique index on `fingerprint` and a B-tree index on `created_at`. Text search filters (`title`, `company`, `location`) would need `pg_trgm` later — that is roadmap item **#6**.
 
 ## Docker, Postgres & Alembic
 
@@ -532,8 +535,9 @@ curl http://127.0.0.1:8000/jobs/YOUR_JOB_ID_HERE/
 │   │   ├── jobs.py          # Jobs HTTP endpoints (thin — delegates to service)
 │   │   └── ingestion_runs.py
 │   ├── services/
-│   │   ├── jobs.py          # Jobs business rules + domain exceptions
-│   │   └── ingestion.py     # Bulk upsert logic (Celery path)
+│   │   ├── jobs.py            # Jobs business rules + domain exceptions
+│   │   ├── ingestion_runs.py  # Start/get ingestion runs (API path)
+│   │   └── ingestion.py       # Bulk upsert logic (Celery path)
 │   ├── repositories/
 │   │   ├── jobs.py          # Jobs DB access (AsyncSession)
 │   │   └── ingestion_runs.py
