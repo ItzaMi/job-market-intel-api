@@ -5,6 +5,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - /app/.venv
     command: uv run fastapi dev src/job_market_intel/main.py --host 0.0.0.0
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/job_market_intel
@@ -18,6 +19,7 @@ services:
     build: .
     volumes:
       - .:/app
+      - /app/.venv
     command: uv run celery -A job_market_intel.worker:celery_app worker --loglevel=info
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/job_market_intel
